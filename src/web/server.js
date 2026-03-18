@@ -20,6 +20,9 @@ import {
   getNetworkEvents,
 } from '../db/store.js';
 
+// In-memory approval decisions: alertId -> 'approved' | 'denied'
+const approvalDecisions = new Map();
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export const WEB_PORT = Number(process.env.ARGUS_WEB_PORT) || 3131;
@@ -211,6 +214,7 @@ export function startWebServer(db, port) {
     const allowOrigin = corsOriginHeader(origin);
     const url = new URL(req.url || '/', `http://127.0.0.1:${listenPort}`);
     const path = url.pathname;
+    const method = req.method || 'GET';
 
     // --- Static UI ---
     if (path === '/' || path === '/index.html') {
@@ -288,6 +292,73 @@ export function startWebServer(db, port) {
 
     if (path === '/api/injections') {
       sendJson(res, 200, getInjectionAlerts(db), allowOrigin);
+      return;
+    }
+
+    // Approvals: GET pending, POST approve/deny
+    if (path === '/api/approvals' && method === 'GET') {
+      let alerts = [];
+      try { alerts = getRecentAlerts(db, since24h()); } catch { /* ignore */ }
+      // Return sensitive alerts with their approval status
+      const pending = alerts
+        .filter(a => a.sensitivity === 'credentials' || a.sensitivity === 'browserData')
+        .slice(0, 20)
+        .map(a => ({ ...a, decision: approvalDecisions.get(a.id) || 'pending' }));
+      sendJson(res, 200, pending, allowOrigin);
+      return;
+    }
+
+    if (path === '/api/approvals/decide' && method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', () => {
+        try {
+          const { id, decision } = JSON.parse(body);
+          if (!id || !['approved', 'denied'].includes(decision)) {
+            res.writeHead(400); res.end('Bad Request'); return;
+          }
+          approvalDecisions.set(Number(id), decision);
+          sendJson(res, 200, { ok: true, id, decision }, allowOrigin);
+        } catch {
+          res.writeHead(400); res.end('Bad Request');
+        }
+      });
+      return;
+    }
+
+    // App activity: per-app summary of ports + recent files
+    if (path === '/api/activity' && method === 'GET') {
+      let processes = [];
+      let alerts = [];
+      let ports = [];
+      try { processes = getActiveProcesses(db, since24h()); } catch { /* ignore */ }
+      try { alerts = getRecentAlerts(db, since24h()); } catch { /* ignore */ }
+      try { ports = getAllPortHistory(db); } catch { /* ignore */ }
+
+      // Group by app_label
+      const byApp = {};
+      for (const p of processes) {
+        const label = p.app_label || p.name;
+        if (!byApp[label]) byApp[label] = { label, category: p.category, ports: [], files: [] };
+      }
+      for (const p of ports) {
+        const label = p.app_label || p.process_name;
+        if (byApp[label]) byApp[label].ports.push(p.port);
+      }
+      for (const a of alerts) {
+        const label = a.app_label || a.process_name;
+        if (byApp[label]) {
+          byApp[label].files.push({ path: a.file_path, sensitivity: a.sensitivity, ts: a.timestamp });
+        }
+      }
+
+      // Dedupe ports, cap files at 5 most recent
+      const activity = Object.values(byApp).map(app => ({
+        ...app,
+        ports: [...new Set(app.ports)].sort((a, b) => a - b),
+        files: app.files.slice(0, 5),
+      }));
+      sendJson(res, 200, activity, allowOrigin);
       return;
     }
 
