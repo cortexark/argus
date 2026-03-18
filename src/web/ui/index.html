@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Argus — AI Monitor</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d1117;
+      --bg2: #161b22;
+      --bg3: #21262d;
+      --border: #30363d;
+      --text: #c9d1d9;
+      --muted: #8b949e;
+      --green: #00ff88;
+      --red: #ff4444;
+      --orange: #ff8c00;
+      --yellow: #ffd700;
+      --blue: #58a6ff;
+      --accent: #00ff88;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    header {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo { font-size: 20px; font-weight: 700; color: var(--accent); letter-spacing: 2px; }
+    .logo span { color: var(--text); font-weight: 300; font-size: 13px; margin-left: 8px; }
+    .header-right { display: flex; align-items: center; gap: 16px; }
+
+    .ws-badge {
+      font-size: 11px; padding: 3px 8px; border-radius: 12px;
+      font-weight: 600; letter-spacing: 0.5px;
+    }
+    .ws-live { background: rgba(0,255,136,0.15); color: var(--green); border: 1px solid var(--green); }
+    .ws-reconnecting { background: rgba(255,68,68,0.15); color: var(--red); border: 1px solid var(--red); }
+
+    .btn {
+      background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+      padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px;
+      transition: border-color 0.15s;
+    }
+    .btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    nav {
+      background: var(--bg2); border-bottom: 1px solid var(--border);
+      padding: 0 24px; display: flex; gap: 0;
+    }
+
+    .tab {
+      padding: 10px 20px; cursor: pointer; color: var(--muted);
+      border-bottom: 2px solid transparent; font-size: 13px; font-weight: 500;
+      transition: color 0.15s, border-color 0.15s; user-select: none;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+    .section { display: none; }
+    .section.active { display: block; }
+
+    .stats-row {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px; margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 20px;
+    }
+    .stat-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .stat-value { font-size: 32px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+    .stat-sub { color: var(--muted); font-size: 11px; margin-top: 4px; }
+
+    .status-hero {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 24px; margin-bottom: 24px; display: flex; align-items: center; gap: 16px;
+    }
+    .status-dot { width: 16px; height: 16px; border-radius: 50%; background: var(--red); flex-shrink: 0; }
+    .status-dot.running { background: var(--green); box-shadow: 0 0 12px var(--green); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+    .status-text { font-size: 20px; font-weight: 700; }
+    .status-text.running { color: var(--green); }
+    .status-text.stopped { color: var(--red); }
+    .status-uptime { color: var(--muted); font-size: 13px; }
+
+    .feed-title { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+    .feed { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+
+    .feed-item {
+      display: flex; align-items: flex-start; gap: 12px; padding: 10px 16px;
+      border-bottom: 1px solid var(--border); font-size: 13px;
+      animation: fadeIn 0.3s ease;
+    }
+    .feed-item:last-child { border-bottom: none; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+    .feed-time { color: var(--muted); font-size: 11px; white-space: nowrap; font-variant-numeric: tabular-nums; min-width: 80px; }
+    .feed-badge { padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; white-space: nowrap; }
+    .feed-badge.file_alert { background: rgba(255,68,68,0.2); color: var(--red); }
+    .feed-badge.network { background: rgba(88,166,255,0.2); color: var(--blue); }
+    .feed-badge.process { background: rgba(0,255,136,0.15); color: var(--green); }
+    .feed-badge.injection { background: rgba(255,140,0,0.2); color: var(--orange); }
+    .feed-msg { color: var(--text); flex: 1; }
+    .feed-empty { padding: 24px; text-align: center; color: var(--muted); }
+
+    .table-wrap { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; overflow: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th {
+      padding: 10px 14px; text-align: left; color: var(--muted); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;
+      border-bottom: 1px solid var(--border); background: var(--bg3); white-space: nowrap;
+    }
+    tbody td { padding: 9px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: rgba(255,255,255,0.03); }
+    .empty-row td { text-align: center; color: var(--muted); padding: 32px; }
+
+    .badge { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
+    .badge-red { background: rgba(255,68,68,0.2); color: var(--red); border: 1px solid rgba(255,68,68,0.4); }
+    .badge-yellow { background: rgba(255,215,0,0.15); color: var(--yellow); border: 1px solid rgba(255,215,0,0.4); }
+    .badge-green { background: rgba(0,255,136,0.1); color: var(--green); border: 1px solid rgba(0,255,136,0.3); }
+    .badge-orange { background: rgba(255,140,0,0.15); color: var(--orange); border: 1px solid rgba(255,140,0,0.4); }
+    .badge-blue { background: rgba(88,166,255,0.15); color: var(--blue); border: 1px solid rgba(88,166,255,0.3); }
+
+    tr.sens-credentials { background: rgba(255,68,68,0.05); }
+    tr.sens-browserData { background: rgba(255,140,0,0.05); }
+    tr.sens-documents { background: rgba(255,215,0,0.04); }
+    tr.net-unknown { background: rgba(255,68,68,0.04); }
+
+    .port-bar-wrap { display: flex; align-items: center; gap: 8px; }
+    .port-bar { height: 6px; background: var(--accent); border-radius: 3px; min-width: 4px; opacity: 0.7; }
+    .port-count { color: var(--muted); font-size: 11px; }
+
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; align-items: center; justify-content: center; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; width: 90vw; max-width: 800px; max-height: 80vh; display: flex; flex-direction: column; }
+    .modal-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .modal-title { font-weight: 600; color: var(--text); }
+    .modal-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 20px; line-height: 1; }
+    .modal-close:hover { color: var(--text); }
+    .modal-body { padding: 20px; overflow: auto; flex: 1; }
+    .report-pre { font-family: 'Courier New', Courier, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; color: var(--text); line-height: 1.6; }
+
+    @media (max-width: 640px) {
+      main { padding: 12px; }
+      .stats-row { grid-template-columns: repeat(2, 1fr); }
+      nav { overflow-x: auto; }
+      .tab { padding: 8px 14px; font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">ARGUS <span>AI Monitor</span></div>
+    <div class="header-right">
+      <span class="ws-badge ws-reconnecting" id="wsBadge">CONNECTING</span>
+      <button class="btn" id="reportBtn">Run Report</button>
+    </div>
+  </header>
+
+  <nav>
+    <div class="tab active" data-tab="overview">Overview</div>
+    <div class="tab" data-tab="processes">Processes</div>
+    <div class="tab" data-tab="files">File Alerts</div>
+    <div class="tab" data-tab="network">Network</div>
+    <div class="tab" data-tab="ports">Ports</div>
+  </nav>
+
+  <main>
+    <section class="section active" id="tab-overview">
+      <div class="status-hero">
+        <div class="status-dot" id="statusDot"></div>
+        <div>
+          <div class="status-text" id="statusText">STOPPED</div>
+          <div class="status-uptime" id="statusUptime">Uptime: --</div>
+        </div>
+      </div>
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">Active AI Apps</div>
+          <div class="stat-value" id="statProcesses">--</div>
+          <div class="stat-sub">last 24h</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">File Alerts Today</div>
+          <div class="stat-value" id="statAlerts">--</div>
+          <div class="stat-sub">last 24h</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Network Events</div>
+          <div class="stat-value" id="statNetwork">--</div>
+          <div class="stat-sub">last 24h</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Injection Alerts</div>
+          <div class="stat-value" id="statInjections">--</div>
+          <div class="stat-sub">last 24h</div>
+        </div>
+      </div>
+      <div class="feed-title">Recent Activity</div>
+      <div class="feed" id="activityFeed">
+        <div class="feed-empty">No recent activity</div>
+      </div>
+    </section>
+
+    <section class="section" id="tab-processes">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>App Name</th><th>Category</th><th>Verdict</th></tr></thead>
+          <tbody id="processTable"><tr class="empty-row"><td colspan="3">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" id="tab-files">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Time</th><th>AI App</th><th>File Path</th><th>Sensitivity</th><th>Alert Type</th></tr></thead>
+          <tbody id="fileTable"><tr class="empty-row"><td colspan="5">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" id="tab-network">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Time</th><th>AI App</th><th>Destination</th><th>Port</th><th>Service</th><th>State</th></tr></thead>
+          <tbody id="networkTable"><tr class="empty-row"><td colspan="6">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" id="tab-ports">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>AI App</th><th>Port</th><th>First Seen</th><th>Last Seen</th><th>Connections</th></tr></thead>
+          <tbody id="portTable"><tr class="empty-row"><td colspan="5">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div class="modal-overlay" id="reportModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">Argus Report</span>
+        <button class="modal-close" id="modalClose">x</button>
+      </div>
+      <div class="modal-body">
+        <pre class="report-pre" id="reportContent">Loading...</pre>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // All data rendered into the DOM goes through esc() before innerHTML insertion.
+    // This prevents XSS from DB-sourced strings.
+    function esc(str) {
+      if (str == null) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function fmtTime(ts) {
+      if (!ts) return '--';
+      try { return new Date(ts).toLocaleTimeString(); } catch { return String(ts); }
+    }
+
+    function fmtDateTime(ts) {
+      if (!ts) return '--';
+      try { return new Date(ts).toLocaleString(); } catch { return String(ts); }
+    }
+
+    function fmtUptime(secs) {
+      if (secs == null) return '--';
+      const h = Math.floor(secs / 3600);
+      const m = Math.floor((secs % 3600) / 60);
+      const s = secs % 60;
+      return h + 'h ' + m + 'm ' + s + 's';
+    }
+
+    // Tab switching
+    document.querySelectorAll('.tab').forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+        document.querySelectorAll('.section').forEach(function(s) { s.classList.remove('active'); });
+        tab.classList.add('active');
+        var target = document.getElementById('tab-' + tab.dataset.tab);
+        if (target) target.classList.add('active');
+      });
+    });
+
+    // Activity feed
+    var feedEvents = [];
+    var MAX_FEED = 10;
+
+    function addFeedEvent(type, msg, ts) {
+      feedEvents.unshift({ type: type, msg: msg, ts: ts || new Date().toISOString() });
+      if (feedEvents.length > MAX_FEED) feedEvents.length = MAX_FEED;
+      renderFeed();
+    }
+
+    function renderFeed() {
+      var el = document.getElementById('activityFeed');
+      if (!feedEvents.length) {
+        el.textContent = '';
+        var empty = document.createElement('div');
+        empty.className = 'feed-empty';
+        empty.textContent = 'No recent activity';
+        el.appendChild(empty);
+        return;
+      }
+      el.textContent = '';
+      feedEvents.forEach(function(e) {
+        var item = document.createElement('div');
+        item.className = 'feed-item';
+
+        var timeEl = document.createElement('span');
+        timeEl.className = 'feed-time';
+        timeEl.textContent = fmtTime(e.ts);
+
+        var badgeEl = document.createElement('span');
+        badgeEl.className = 'feed-badge ' + e.type;
+        badgeEl.textContent = e.type.replace('_', ' ');
+
+        var msgEl = document.createElement('span');
+        msgEl.className = 'feed-msg';
+        msgEl.textContent = e.msg;
+
+        item.appendChild(timeEl);
+        item.appendChild(badgeEl);
+        item.appendChild(msgEl);
+        el.appendChild(item);
+      });
+    }
+
+    // Fetch helper
+    function fetchJSON(url) {
+      return fetch(url).then(function(res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      });
+    }
+
+    function refreshStatus() {
+      return fetchJSON('/api/status').then(function(data) {
+        var dot = document.getElementById('statusDot');
+        var text = document.getElementById('statusText');
+        var uptime = document.getElementById('statusUptime');
+        if (data.running) {
+          dot.className = 'status-dot running';
+          text.className = 'status-text running';
+          text.textContent = 'MONITORING';
+        } else {
+          dot.className = 'status-dot';
+          text.className = 'status-text stopped';
+          text.textContent = 'STOPPED';
+        }
+        uptime.textContent = 'Uptime: ' + fmtUptime(data.uptime);
+        document.getElementById('statProcesses').textContent = (data.processCount != null ? data.processCount : '--');
+        document.getElementById('statAlerts').textContent = (data.alertCount != null ? data.alertCount : '--');
+      }).catch(function() {});
+    }
+
+    function refreshProcesses() {
+      return fetchJSON('/api/processes').then(function(data) {
+        var tbody = document.getElementById('processTable');
+        tbody.textContent = '';
+        if (!data.length) {
+          var tr = document.createElement('tr');
+          tr.className = 'empty-row';
+          var td = document.createElement('td');
+          td.colSpan = 3;
+          td.textContent = 'No processes detected';
+          tr.appendChild(td);
+          tbody.appendChild(tr);
+          return;
+        }
+        data.forEach(function(p) {
+          var tr = document.createElement('tr');
+          var tdName = document.createElement('td');
+          tdName.textContent = p.app_label || p.name || '--';
+          var tdCat = document.createElement('td');
+          tdCat.textContent = p.category || '--';
+          var tdVerdict = document.createElement('td');
+          if (p.app_label) {
+            var badge = document.createElement('span');
+            badge.className = 'badge badge-green';
+            badge.textContent = 'KNOWN AI';
+            tdVerdict.appendChild(badge);
+          }
+          tr.appendChild(tdName);
+          tr.appendChild(tdCat);
+          tr.appendChild(tdVerdict);
+          tbody.appendChild(tr);
+        });
+      }).catch(function() {});
+    }
+
+    function refreshAlerts() {
+      return Promise.all([fetchJSON('/api/alerts'), fetchJSON('/api/injections')]).then(function(results) {
+        var data = results[0];
+        var inj = results[1];
+        document.getElementById('statInjections').textContent = inj.length;
+
+        var tbody = document.getElementById('fileTable');
+        tbody.textContent = '';
+        if (!data.length) {
+          var tr = document.createElement('tr');
+          tr.className = 'empty-row';
+          var td = document.createElement('td');
+          td.colSpan = 5;
+          td.textContent = 'No file alerts';
+          tr.appendChild(td);
+          tbody.appendChild(tr);
+          return;
+        }
+        data.forEach(function(a) {
+          var sens = a.sensitivity || '';
+          var tr = document.createElement('tr');
+          if (sens === 'credentials') tr.className = 'sens-credentials';
+          else if (sens === 'browserData') tr.className = 'sens-browserData';
+          else if (sens === 'documents') tr.className = 'sens-documents';
+
+          var tdTime = document.createElement('td');
+          tdTime.textContent = fmtTime(a.timestamp);
+
+          var tdApp = document.createElement('td');
+          tdApp.textContent = a.app_label || a.process_name || '--';
+
+          var tdPath = document.createElement('td');
+          tdPath.style.fontFamily = 'monospace';
+          tdPath.style.fontSize = '12px';
+          tdPath.style.maxWidth = '300px';
+          tdPath.style.wordBreak = 'break-all';
+          tdPath.textContent = a.file_path || '--';
+
+          var tdSens = document.createElement('td');
+          var badge = document.createElement('span');
+          if (sens === 'credentials') { badge.className = 'badge badge-red'; badge.textContent = 'CREDENTIALS'; }
+          else if (sens === 'browserData') { badge.className = 'badge badge-orange'; badge.textContent = 'BROWSER DATA'; }
+          else if (sens === 'documents') { badge.className = 'badge badge-yellow'; badge.textContent = 'DOCUMENTS'; }
+          else { badge.className = 'badge badge-blue'; badge.textContent = sens || 'unknown'; }
+          tdSens.appendChild(badge);
+
+          var tdType = document.createElement('td');
+          var isInjection = a.access_type === 'injection' || sens === 'injection';
+          if (isInjection) {
+            var injBadge = document.createElement('span');
+            injBadge.className = 'badge badge-orange';
+            injBadge.textContent = 'INJECTION';
+            tdType.textContent = '\u26A0 ';
+            tdType.appendChild(injBadge);
+          } else {
+            tdType.textContent = a.access_type || '--';
+          }
+
+          tr.appendChild(tdTime);
+          tr.appendChild(tdApp);
+          tr.appendChild(tdPath);
+          tr.appendChild(tdSens);
+          tr.appendChild(tdType);
+          tbody.appendChild(tr);
+        });
+      }).catch(function() {});
+    }
+
+    function refreshNetwork() {
+      return fetchJSON('/api/network').then(function(data) {
+        document.getElementById('statNetwork').textContent = data.length;
+        var tbody = document.getElementById('networkTable');
+        tbody.textContent = '';
+        if (!data.length) {
+          var tr = document.createElement('tr');
+          tr.className = 'empty-row';
+          var td = document.createElement('td');
+          td.colSpan = 6;
+          td.textContent = 'No network events';
+          tr.appendChild(td);
+          tbody.appendChild(tr);
+          return;
+        }
+        data.forEach(function(e) {
+          var tr = document.createElement('tr');
+          var isKnown = !!e.ai_service;
+          if (!isKnown) tr.className = 'net-unknown';
+
+          var tdTime = document.createElement('td');
+          tdTime.textContent = fmtTime(e.timestamp);
+
+          var tdApp = document.createElement('td');
+          tdApp.textContent = e.app_label || e.process_name || '--';
+
+          var tdDest = document.createElement('td');
+          tdDest.style.color = isKnown ? 'var(--green)' : 'var(--red)';
+          tdDest.textContent = e.remote_host || e.remote_address || '--';
+
+          var tdPort = document.createElement('td');
+          tdPort.textContent = e.port || '--';
+
+          var tdSvc = document.createElement('td');
+          tdSvc.textContent = e.ai_service || '--';
+
+          var tdState = document.createElement('td');
+          tdState.textContent = e.state || '--';
+
+          tr.appendChild(tdTime);
+          tr.appendChild(tdApp);
+          tr.appendChild(tdDest);
+          tr.appendChild(tdPort);
+          tr.appendChild(tdSvc);
+          tr.appendChild(tdState);
+          tbody.appendChild(tr);
+        });
+      }).catch(function() {});
+    }
+
+    function refreshPorts() {
+      return fetchJSON('/api/ports').then(function(data) {
+        var tbody = document.getElementById('portTable');
+        tbody.textContent = '';
+        if (!data.length) {
+          var tr = document.createElement('tr');
+          tr.className = 'empty-row';
+          var td = document.createElement('td');
+          td.colSpan = 5;
+          td.textContent = 'No port history';
+          tr.appendChild(td);
+          tbody.appendChild(tr);
+          return;
+        }
+        var maxCount = data.reduce(function(m, p) { return Math.max(m, p.connection_count || 0); }, 1);
+        data.forEach(function(p) {
+          var tr = document.createElement('tr');
+          var pct = Math.max(4, Math.round(((p.connection_count || 0) / maxCount) * 120));
+
+          var tdApp = document.createElement('td');
+          tdApp.textContent = p.app_label || p.process_name || '--';
+
+          var tdPort = document.createElement('td');
+          tdPort.textContent = p.port || '--';
+
+          var tdFirst = document.createElement('td');
+          tdFirst.textContent = fmtDateTime(p.first_seen);
+
+          var tdLast = document.createElement('td');
+          tdLast.textContent = fmtDateTime(p.last_seen);
+
+          var tdCount = document.createElement('td');
+          var wrap = document.createElement('div');
+          wrap.className = 'port-bar-wrap';
+          var bar = document.createElement('div');
+          bar.className = 'port-bar';
+          bar.style.width = pct + 'px';
+          var countEl = document.createElement('span');
+          countEl.className = 'port-count';
+          countEl.textContent = p.connection_count || 0;
+          wrap.appendChild(bar);
+          wrap.appendChild(countEl);
+          tdCount.appendChild(wrap);
+
+          tr.appendChild(tdApp);
+          tr.appendChild(tdPort);
+          tr.appendChild(tdFirst);
+          tr.appendChild(tdLast);
+          tr.appendChild(tdCount);
+          tbody.appendChild(tr);
+        });
+      }).catch(function() {});
+    }
+
+    function refreshAll() {
+      return Promise.all([
+        refreshStatus(),
+        refreshProcesses(),
+        refreshAlerts(),
+        refreshNetwork(),
+        refreshPorts()
+      ]);
+    }
+
+    refreshAll();
+    setInterval(refreshAll, 5000);
+
+    // WebSocket for live updates
+    var wsBadge = document.getElementById('wsBadge');
+
+    function connectWS() {
+      var ws;
+      try {
+        ws = new WebSocket('ws://localhost:3131/ws');
+      } catch(e) {
+        return;
+      }
+
+      ws.onopen = function() {
+        wsBadge.className = 'ws-badge ws-live';
+        wsBadge.textContent = 'LIVE';
+      };
+
+      ws.onmessage = function(evt) {
+        try {
+          var event = JSON.parse(evt.data);
+          var type = event.type || 'unknown';
+          var data = event.data || {};
+          var msg = '';
+          if (type === 'file_alert') msg = (data.app_label || data.processName || '?') + ' accessed ' + (data.file_path || data.filePath || '?');
+          else if (type === 'network') msg = (data.app_label || data.processName || '?') + ' -> ' + (data.remote_host || data.remoteHost || '?');
+          else if (type === 'process') msg = 'Process: ' + (data.app_label || data.name || '?');
+          else if (type === 'injection') msg = 'Injection: ' + (data.file_path || data.filePath || '?');
+          else msg = JSON.stringify(data).slice(0, 80);
+          addFeedEvent(type, msg, data.timestamp);
+          refreshAll();
+        } catch(e) {}
+      };
+
+      ws.onclose = function() {
+        wsBadge.className = 'ws-badge ws-reconnecting';
+        wsBadge.textContent = 'RECONNECTING';
+        setTimeout(connectWS, 3000);
+      };
+
+      ws.onerror = function() {
+        wsBadge.className = 'ws-badge ws-reconnecting';
+        wsBadge.textContent = 'RECONNECTING';
+      };
+    }
+
+    connectWS();
+
+    // Report modal
+    var reportBtn = document.getElementById('reportBtn');
+    var reportModal = document.getElementById('reportModal');
+    var modalClose = document.getElementById('modalClose');
+    var reportContent = document.getElementById('reportContent');
+
+    reportBtn.addEventListener('click', function() {
+      reportModal.classList.add('open');
+      reportContent.textContent = 'Loading...';
+      fetchJSON('/api/report').then(function(data) {
+        reportContent.textContent = JSON.stringify(data, null, 2);
+      }).catch(function(err) {
+        reportContent.textContent = 'Error loading report: ' + err.message;
+      });
+    });
+
+    modalClose.addEventListener('click', function() {
+      reportModal.classList.remove('open');
+    });
+
+    reportModal.addEventListener('click', function(e) {
+      if (e.target === reportModal) reportModal.classList.remove('open');
+    });
+  </script>
+</body>
+</html>
