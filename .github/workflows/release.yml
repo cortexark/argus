@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'            # triggers on version tags: v1.0.0, v1.2.3, etc.
+
+jobs:
+  test:
+    name: Verify tests pass before release
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - run: npm install
+      - run: npm test
+
+  release:
+    name: Create GitHub Release
+    needs: test            # only runs if tests pass
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history for changelog
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Generate changelog from commits
+        id: changelog
+        run: |
+          PREV_TAG=$(git tag --sort=-version:refname | sed -n '2p')
+          if [ -z "$PREV_TAG" ]; then
+            RANGE="HEAD"
+          else
+            RANGE="${PREV_TAG}..HEAD"
+          fi
+          {
+            echo "changelog<<EOF"
+            git log "$RANGE" --pretty=format:"- %s" --no-merges
+            echo ""
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Argus ${{ steps.version.outputs.version }}
+          body: |
+            ## What's Changed
+
+            ${{ steps.changelog.outputs.changelog }}
+
+            ## Install
+
+            ```bash
+            npm install -g argus
+            argus install && argus start
+            ```
+
+            See [README](https://github.com/cortexark/argus#readme) for full usage.
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}

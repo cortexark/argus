@@ -2,16 +2,13 @@ name: Tests
 
 on:
   push:
-    branches:
-      - main
-      - develop
+    branches: ['**']        # run on every branch push
   pull_request:
-    branches:
-      - main
-      - develop
+    branches: [main]        # required gate before merge to main
 
 jobs:
   test:
+    name: Test (Node ${{ matrix.node-version }})
     runs-on: macos-latest
     strategy:
       matrix:
@@ -32,3 +29,11 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-node${{ matrix.node-version }}
+          path: ~/.argus/logs/
+          retention-days: 7
