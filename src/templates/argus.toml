@@ -1,0 +1,41 @@
+# Argus Policy Configuration
+# Place this file at ~/.argus/argus.toml
+#
+# Defines what each AI agent is EXPECTED to access.
+# Anything outside these rules triggers a policy violation alert.
+# This is monitor-only — Argus does not block access.
+
+[defaults]
+# Paths that should NEVER be accessed by any AI agent
+deny_paths = [
+  "~/.ssh/*",
+  "~/.aws/*",
+  "~/.gnupg/*",
+  "~/.1password/*",
+  "~/Library/Keychains/*",
+  "~/.config/gh/hosts.yml",
+  "~/.netrc"
+]
+
+[agent.cursor]
+# Cursor should only read files in your project directories
+allow_paths = ["~/Projects/**", "~/workspace/**", "~/code/**"]
+allow_network = ["api.openai.com", "*.cursor.sh", "github.com", "*.github.com"]
+
+[agent.claude]
+# Claude Code works in the current directory
+allow_paths = ["~/Projects/**", "~/workspace/**"]
+allow_network = ["*.anthropic.com", "github.com", "*.github.com", "*.githubusercontent.com"]
+
+[agent.copilot]
+allow_network = ["*.github.com", "*.githubcopilot.com", "api.github.com"]
+
+[agent.chatgpt]
+allow_paths = ["~/Documents/**", "~/Downloads/**"]
+allow_network = ["*.openai.com", "chatgpt.com"]
+
+# Add your own agent rules below:
+# [agent.my-tool]
+# allow_paths = ["~/specific-project/**"]
+# deny_paths = ["~/specific-project/.env"]
+# allow_network = ["api.my-service.com"]
