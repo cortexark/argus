@@ -27,10 +27,19 @@ export function matchAIEndpoint(remoteAddress) {
   return null;
 }
 
+// Well-known service name → port number (for netstat without -n)
+const SERVICE_PORTS = Object.freeze({
+  http: 80, https: 443, ssh: 22, smtp: 25, dns: 53, domain: 53,
+  imaps: 993, imap: 143, pop3s: 995, pop3: 110,
+  ftps: 990, ftp: 21, ldaps: 636, ldap: 389,
+  ntp: 123, snmp: 161, syslog: 514,
+});
+
 /**
  * Extract the remote port from a network address string.
  * Handles:
  *   "IP:PORT"             -> PORT
+ *   "host:servicename"    -> PORT (via SERVICE_PORTS lookup)
  *   "LOCAL:PORT->REMOTE:PORT" -> remote PORT
  * @param {string | null} addressStr
  * @returns {number | null}
@@ -56,7 +65,10 @@ export function extractPort(addressStr) {
 
   const portStr = target.slice(colonIdx + 1);
   const port = parseInt(portStr, 10);
-  return isNaN(port) ? null : port;
+  if (!isNaN(port)) return port;
+
+  // Named service port (e.g. "https" when netstat resolves names)
+  return SERVICE_PORTS[portStr.toLowerCase()] ?? null;
 }
 
 /**
@@ -90,6 +102,8 @@ export async function scanAINetworkConnections(db, processes) {
  * @returns {Promise<object[]>}
  */
 async function scanMacNetworkConnections(db, processes) {
+  // Use -n for numeric output — avoids costly DNS reverse lookups that cause scan timeouts.
+  // AI endpoint matching works on IP patterns; domain names are matched separately.
   const { stdout, error } = await execCommand('netstat', ['-anv', '-f', 'inet']);
   const { stdout: stdout6 } = await execCommand('netstat', ['-anv', '-f', 'inet6']);
 
@@ -124,6 +138,8 @@ async function scanMacNetworkConnections(db, processes) {
       protocol: conn.protocol,
       state: conn.state,
       aiService,
+      bytesSent: 0,
+      bytesReceived: 0,
       timestamp: now,
     };
 
@@ -149,6 +165,7 @@ async function scanMacNetworkConnections(db, processes) {
 async function scanLsofNetworkConnections(db, processes) {
   // Scope lsof to only AI process PIDs — much faster than scanning all processes
   const pidArgs = processes.flatMap((p) => ['-p', String(p.pid)]);
+  // Use -n for numeric output (fast) and -P for numeric ports.
   const args = pidArgs.length > 0
     ? ['-i', '-n', '-P', '-F', 'pcnst', '-a', ...pidArgs]
     : ['-i', '-n', '-P', '-F', 'pcnst'];
@@ -180,6 +197,8 @@ async function scanLsofNetworkConnections(db, processes) {
       protocol: conn.protocol,
       state: conn.state,
       aiService,
+      bytesSent: 0,
+      bytesReceived: 0,
       timestamp: now,
     };
 

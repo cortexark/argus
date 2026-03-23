@@ -103,7 +103,7 @@ test('insertNetworkEvent: inserts and returns record with id', () => {
     localAddress: '127.0.0.1:54321', remoteAddress: 'api.anthropic.com:443',
     remoteHost: 'api.anthropic.com', port: 443,
     protocol: 'TCP', state: 'ESTABLISHED', aiService: 'Anthropic Claude API',
-    timestamp: NOW,
+    bytesSent: 0, bytesReceived: 0, timestamp: NOW,
   };
   const result = insertNetworkEvent(db, event);
   assert.ok(result.id > 0);
@@ -117,7 +117,7 @@ test('insertNetworkEvent: does not mutate input', () => {
     localAddress: '0.0.0.0:3000', remoteAddress: '1.2.3.4:80',
     remoteHost: null, port: 80,
     protocol: 'TCP', state: 'ESTABLISHED', aiService: null,
-    timestamp: NOW,
+    bytesSent: 0, bytesReceived: 0, timestamp: NOW,
   };
   const original = { ...event };
   insertNetworkEvent(db, event);
@@ -220,7 +220,7 @@ test('getNetworkEvents: returns events since timestamp', () => {
     pid: 60, processName: 'net-proc', appLabel: null,
     localAddress: '127.0.0.1:1', remoteAddress: '8.8.8.8:53',
     remoteHost: null, port: 53, protocol: 'UDP', state: null,
-    aiService: null, timestamp: NOW,
+    aiService: null, bytesSent: 0, bytesReceived: 0, timestamp: NOW,
   };
   insertNetworkEvent(db, event);
   const events = getNetworkEvents(db, PAST);
@@ -235,7 +235,7 @@ test('getNetworkEvents: returns max 200 events', () => {
       pid: 70 + i, processName: 'bulk-proc', appLabel: null,
       localAddress: `127.0.0.1:${i}`, remoteAddress: `1.2.3.${i}:80`,
       remoteHost: null, port: 80, protocol: 'TCP', state: 'ESTABLISHED',
-      aiService: null, timestamp: NOW,
+      aiService: null, bytesSent: 0, bytesReceived: 0, timestamp: NOW,
     });
   }
   const events = getNetworkEvents(db, PAST);

@@ -4,7 +4,7 @@
  */
 
 import Database from 'better-sqlite3';
-import { mkdirSync, chmodSync, existsSync } from 'node:fs';
+import { mkdirSync, chmodSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 /**
@@ -19,10 +19,7 @@ export function initializeDatabase(dbPath) {
     // Create the directory with restrictive permissions (owner only).
     mkdirSync(dir, { recursive: true, mode: 0o700 });
 
-    // If the DB file does not yet exist, it will be created by better-sqlite3.
-    // We note whether it already existed so we can set permissions after open.
-    const dbFileExisted = existsSync(dbPath);
-    void dbFileExisted; // used below
+    // DB file will be created by better-sqlite3 if it does not exist.
   }
 
   const db = new Database(dbPath);
@@ -82,6 +79,8 @@ export function initializeDatabase(dbPath) {
       protocol TEXT,
       state TEXT,
       ai_service TEXT,
+      bytes_sent INTEGER DEFAULT 0,
+      bytes_received INTEGER DEFAULT 0,
       timestamp TEXT NOT NULL
     );
 
@@ -128,8 +127,34 @@ export function initializeDatabase(dbPath) {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS approval_decisions (
+      alert_id INTEGER PRIMARY KEY,
+      decision TEXT NOT NULL,
+      decided_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS session_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      pid INTEGER NOT NULL,
+      app_label TEXT NOT NULL,
+      process_name TEXT NOT NULL,
+      cmd TEXT,
+      started_at TEXT NOT NULL,
+      ended_at TEXT,
+      duration_seconds INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_session_started ON session_history(started_at DESC);
+
     CREATE INDEX IF NOT EXISTS idx_file_access_app ON file_access_events(app_label, timestamp);
   `);
+
+  // Migration: add bytes columns if they don't exist (for pre-existing databases)
+  try {
+    db.prepare('SELECT bytes_sent FROM network_events LIMIT 0').run();
+  } catch {
+    db.exec('ALTER TABLE network_events ADD COLUMN bytes_sent INTEGER DEFAULT 0');
+    db.exec('ALTER TABLE network_events ADD COLUMN bytes_received INTEGER DEFAULT 0');
+  }
 
   return db;
 }

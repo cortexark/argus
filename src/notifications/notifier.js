@@ -76,7 +76,7 @@ export function sendAlert(appName, alertType, message, opts = {}) {
     title: `Argus — ${appName}`,
     subtitle: alertType.replace(/_/g, ' '),
     message,
-    sound: opts.sound ?? false,
+    sound: opts.sound ? 'Tink' : false,
     urgency: opts.urgency ?? 'normal',
   });
 
@@ -183,7 +183,7 @@ export const notify = {
       appName,
       'new_connection',
       `Connected to ${dest}${portNote}${flagUnknown}`,
-      { urgency: service ? 'normal' : 'normal' },
+      { urgency: service ? 'normal' : 'critical' },
     );
   },
 
@@ -197,6 +197,19 @@ export const notify = {
       appName,
       'new_app_detected',
       `${appName} is now active\nCategory: ${category}\nMonitoring enabled.`,
+      { sound: true },
+    );
+  },
+
+  /**
+   * An AI app session ended.
+   * "Claude Code session ended (duration: 4m 32s)"
+   */
+  appSessionEnded(appName, durationStr) {
+    return sendAlert(
+      appName,
+      'session_ended',
+      `${appName} session ended\nDuration: ${durationStr}`,
     );
   },
 
@@ -247,7 +260,7 @@ export const notify = {
   unknownDomain(appName, domain) {
     return sendAlert(
       appName,
-      `unknown_domain_${domain}`,
+      'unknown_domain',
       `DNS query to unknown domain:\n${domain}\n⚠️ Not a recognised AI service.`,
       { urgency: 'critical' },
     );

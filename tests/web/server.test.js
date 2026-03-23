@@ -86,7 +86,8 @@ insertNetworkEvent(db, {
   pid: 101, processName: 'Claude', appLabel: 'Claude Desktop',
   localAddress: '127.0.0.1:54321', remoteAddress: '18.184.1.1:443',
   remoteHost: 'api.anthropic.com', port: 443, protocol: 'TCP',
-  state: 'ESTABLISHED', aiService: 'Anthropic', timestamp: NOW,
+  state: 'ESTABLISHED', aiService: 'Anthropic',
+  bytesSent: 0, bytesReceived: 0, timestamp: NOW,
 });
 
 // Seed port history

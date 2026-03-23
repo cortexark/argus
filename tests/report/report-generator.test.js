@@ -50,7 +50,7 @@ insertNetworkEvent(db, {
   localAddress: '127.0.0.1:55555', remoteAddress: 'api.anthropic.com:443',
   remoteHost: 'api.anthropic.com', port: 443,
   protocol: 'TCP', state: 'ESTABLISHED', aiService: 'Anthropic Claude API',
-  timestamp: NOW,
+  bytesSent: 0, bytesReceived: 0, timestamp: NOW,
 });
 upsertPortHistory(db, {
   processName: 'claude', appLabel: 'Claude',
