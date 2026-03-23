@@ -48,7 +48,7 @@ logs/
 
 # Build artifacts
 dist/
-build/
+/build/
 .next/
 out/
 
