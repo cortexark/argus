@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Argus — Monitor what AI agents access on your machine</title>
+  <meta name="description" content="Open-source macOS menubar app that tracks file access, network connections, and process activity from AI coding agents like Claude, Cursor, and Copilot.">
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg: #1a1a2e;
+      --bg-surface: #16213e;
+      --bg-card: #0f3460;
+      --accent: #00d4a0;
+      --accent-dim: #00b386;
+      --text: #e0e0e0;
+      --text-muted: #8892a4;
+      --text-bright: #ffffff;
+      --border: #2a2a4a;
+      --code-bg: #0d1117;
+      --red: #ff6b6b;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    /* Nav */
+    nav {
+      position: fixed;
+      top: 0;
+      width: 100%;
+      background: rgba(26, 26, 46, 0.95);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      z-index: 100;
+      padding: 0 2rem;
+    }
+
+    nav .nav-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 60px;
+    }
+
+    nav .logo {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--text-bright);
+      letter-spacing: -0.02em;
+    }
+
+    nav .logo span {
+      color: var(--accent);
+    }
+
+    nav .nav-links {
+      display: flex;
+      gap: 2rem;
+      list-style: none;
+    }
+
+    nav .nav-links a {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      transition: color 0.2s;
+    }
+
+    nav .nav-links a:hover {
+      color: var(--text-bright);
+      text-decoration: none;
+    }
+
+    /* Hero */
+    .hero {
+      padding: 10rem 2rem 6rem;
+      text-align: center;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .hero h1 {
+      font-size: 3rem;
+      font-weight: 800;
+      color: var(--text-bright);
+      line-height: 1.15;
+      letter-spacing: -0.03em;
+      margin-bottom: 1.5rem;
+    }
+
+    .hero h1 em {
+      font-style: normal;
+      color: var(--accent);
+    }
+
+    .hero p {
+      font-size: 1.2rem;
+      color: var(--text-muted);
+      max-width: 600px;
+      margin: 0 auto 2.5rem;
+      line-height: 1.7;
+    }
+
+    .hero-cta {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-block;
+      padding: 0.8rem 1.8rem;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      transition: all 0.2s;
+      border: none;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: var(--bg);
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-dim);
+      text-decoration: none;
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    /* Alert banner */
+    .alert-demo {
+      max-width: 480px;
+      margin: 3rem auto 0;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--red);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      text-align: left;
+      font-size: 0.9rem;
+    }
+
+    .alert-demo .alert-title {
+      color: var(--text-bright);
+      font-weight: 600;
+      margin-bottom: 0.3rem;
+    }
+
+    .alert-demo .alert-body {
+      color: var(--text-muted);
+      font-family: "SF Mono", SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 0.82rem;
+    }
+
+    /* Features */
+    .features {
+      padding: 6rem 2rem;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .features h2 {
+      text-align: center;
+      font-size: 2rem;
+      color: var(--text-bright);
+      margin-bottom: 1rem;
+      letter-spacing: -0.02em;
+    }
+
+    .features .subtitle {
+      text-align: center;
+      color: var(--text-muted);
+      margin-bottom: 3.5rem;
+      font-size: 1.05rem;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 2rem;
+    }
+
+    .feature-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2rem;
+      transition: border-color 0.2s;
+    }
+
+    .feature-card:hover {
+      border-color: var(--accent);
+    }
+
+    .feature-icon {
+      width: 48px;
+      height: 48px;
+      background: rgba(0, 212, 160, 0.1);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 1.25rem;
+      font-size: 1.5rem;
+    }
+
+    .feature-card h3 {
+      color: var(--text-bright);
+      font-size: 1.15rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .feature-card p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+
+    /* How it works */
+    .how-it-works {
+      padding: 5rem 2rem;
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .how-it-works .inner {
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    .how-it-works h2 {
+      text-align: center;
+      font-size: 2rem;
+      color: var(--text-bright);
+      margin-bottom: 2.5rem;
+      letter-spacing: -0.02em;
+    }
+
+    .step-list {
+      list-style: none;
+      counter-reset: steps;
+    }
+
+    .step-list li {
+      counter-increment: steps;
+      padding: 1.25rem 0;
+      padding-left: 3.5rem;
+      position: relative;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .step-list li:last-child {
+      border-bottom: none;
+    }
+
+    .step-list li::before {
+      content: counter(steps);
+      position: absolute;
+      left: 0;
+      top: 1.25rem;
+      width: 2rem;
+      height: 2rem;
+      background: rgba(0, 212, 160, 0.15);
+      color: var(--accent);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.9rem;
+    }
+
+    .step-list li strong {
+      color: var(--text-bright);
+    }
+
+    .step-list li span {
+      color: var(--text-muted);
+    }
+
+    /* Apps monitored */
+    .apps {
+      padding: 5rem 2rem;
+      max-width: 800px;
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    .apps h2 {
+      font-size: 2rem;
+      color: var(--text-bright);
+      margin-bottom: 1rem;
+    }
+
+    .apps .subtitle {
+      color: var(--text-muted);
+      margin-bottom: 2.5rem;
+    }
+
+    .app-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      justify-content: center;
+    }
+
+    .app-tag {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.5rem 1rem;
+      font-size: 0.9rem;
+      color: var(--text);
+    }
+
+    /* Install */
+    .install {
+      padding: 6rem 2rem;
+      text-align: center;
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border);
+    }
+
+    .install h2 {
+      font-size: 2rem;
+      color: var(--text-bright);
+      margin-bottom: 0.75rem;
+    }
+
+    .install .subtitle {
+      color: var(--text-muted);
+      margin-bottom: 2.5rem;
+    }
+
+    .install-options {
+      display: flex;
+      gap: 2rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    .install-option {
+      flex: 1;
+      min-width: 280px;
+    }
+
+    .install-option h3 {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 0.75rem;
+    }
+
+    .code-block {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      font-family: "SF Mono", SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 0.9rem;
+      color: var(--accent);
+      text-align: left;
+      user-select: all;
+    }
+
+    /* Footer */
+    footer {
+      padding: 3rem 2rem;
+      text-align: center;
+      border-top: 1px solid var(--border);
+    }
+
+    footer p {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+
+    footer a {
+      color: var(--text-muted);
+    }
+
+    footer a:hover {
+      color: var(--accent);
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 2rem;
+      justify-content: center;
+      margin-bottom: 1rem;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .hero {
+        padding: 8rem 1.5rem 4rem;
+      }
+
+      .hero h1 {
+        font-size: 2rem;
+      }
+
+      .hero p {
+        font-size: 1.05rem;
+      }
+
+      .feature-grid {
+        grid-template-columns: 1fr;
+      }
+
+      nav .nav-links {
+        gap: 1rem;
+      }
+
+      .install-options {
+        flex-direction: column;
+        align-items: center;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .hero h1 {
+        font-size: 1.75rem;
+      }
+
+      .hero-cta {
+        flex-direction: column;
+        align-items: center;
+      }
+
+      nav .nav-links {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <div class="nav-inner">
+      <div class="logo"><span>&#9678;</span> Argus</div>
+      <ul class="nav-links">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#how-it-works">How it works</a></li>
+        <li><a href="#install">Install</a></li>
+        <li><a href="https://github.com/cortexark/argus">GitHub</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <h1>Know what AI sees <em>on your machine</em></h1>
+    <p>Argus monitors file access, network connections, and process activity from AI coding agents. Open source. Fully local. No telemetry.</p>
+    <div class="hero-cta">
+      <a href="#install" class="btn btn-primary">Install Argus</a>
+      <a href="https://github.com/cortexark/argus" class="btn btn-secondary">View on GitHub</a>
+    </div>
+
+    <div class="alert-demo">
+      <div class="alert-title">Argus &mdash; Claude Code</div>
+      <div class="alert-body">Accessed credential file:<br>~/.ssh/id_rsa<br>SSH key / cloud credential risk.</div>
+    </div>
+  </section>
+
+  <section class="features" id="features">
+    <h2>What Argus tracks</h2>
+    <p class="subtitle">Real-time monitoring of AI agent activity across your system</p>
+
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00d4a0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+        </div>
+        <h3>File Monitoring</h3>
+        <p>Alerts when AI apps read SSH keys, AWS credentials, .env files, browser password stores, or documents outside your project. Uses chokidar watches and macOS Unified Log for real-time detection.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00d4a0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+        </div>
+        <h3>Network Tracking</h3>
+        <p>Logs every outbound connection from AI processes. Identifies known AI service endpoints and flags unknown destinations, suspicious ports, and browser automation via Chrome DevTools Protocol.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00d4a0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+        </div>
+        <h3>Real-time Alerts</h3>
+        <p>Native macOS notifications for credential access, unknown domains, and unusual port activity. Throttled and batched to avoid notification fatigue. Critical alerts include sound.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="how-it-works" id="how-it-works">
+    <div class="inner">
+      <h2>How it works</h2>
+      <ol class="step-list">
+        <li>
+          <strong>Install and launch.</strong>
+          <span> Argus starts as a menubar app. No configuration needed — it begins monitoring immediately.</span>
+        </li>
+        <li>
+          <strong>AI agents are detected automatically.</strong>
+          <span> Argus identifies Claude, Cursor, Copilot, ChatGPT, Ollama, and 15+ other AI tools by process name.</span>
+        </li>
+        <li>
+          <strong>Activity is logged locally.</strong>
+          <span> File reads, network connections, and process events go into a local SQLite database at ~/.argus/data.db. Nothing leaves your machine.</span>
+        </li>
+        <li>
+          <strong>Alerts surface what matters.</strong>
+          <span> Credential access, unknown network destinations, and browser automation trigger native notifications so you know immediately.</span>
+        </li>
+        <li>
+          <strong>Review in the dashboard.</strong>
+          <span> Click the menubar icon to see a timeline of all AI activity — files accessed, connections made, session history.</span>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="apps">
+    <h2>Apps monitored</h2>
+    <p class="subtitle">Argus tracks all major AI coding and desktop LLM tools</p>
+    <div class="app-tags">
+      <span class="app-tag">Claude Code</span>
+      <span class="app-tag">Claude Desktop</span>
+      <span class="app-tag">Cursor</span>
+      <span class="app-tag">GitHub Copilot</span>
+      <span class="app-tag">ChatGPT</span>
+      <span class="app-tag">Windsurf</span>
+      <span class="app-tag">Ollama</span>
+      <span class="app-tag">LM Studio</span>
+      <span class="app-tag">Continue.dev</span>
+      <span class="app-tag">Perplexity</span>
+      <span class="app-tag">Amazon Q</span>
+      <span class="app-tag">Tabnine</span>
+      <span class="app-tag">OpenAI Codex</span>
+    </div>
+  </section>
+
+  <section class="install" id="install">
+    <h2>Get started</h2>
+    <p class="subtitle">Install in one command. No accounts, no signup.</p>
+    <div class="install-options">
+      <div class="install-option">
+        <h3>Homebrew</h3>
+        <div class="code-block">brew install --cask argus</div>
+      </div>
+      <div class="install-option">
+        <h3>npm</h3>
+        <div class="code-block">npm install -g argus</div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="footer-links">
+      <a href="https://github.com/cortexark/argus">GitHub</a>
+      <a href="https://github.com/cortexark/argus/issues">Issues</a>
+      <a href="https://github.com/cortexark/argus/blob/main/LICENSE">MIT License</a>
+    </div>
+    <p>Argus is open source. All data stays on your machine.</p>
+  </footer>
+
+</body>
+</html>

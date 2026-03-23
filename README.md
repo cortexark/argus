@@ -1,6 +1,6 @@
 # Argus
 
-[![CI Tests](https://github.com/todo/argus/actions/workflows/test.yml/badge.svg)](https://github.com/todo/argus/actions)
+[![CI Tests](https://github.com/cortexark/argus/actions/workflows/test.yml/badge.svg)](https://github.com/cortexark/argus/actions)
 [![Node Version](https://img.shields.io/badge/node-%3E%3D18.0-brightgreen)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -151,7 +151,7 @@ timestamp,app,event_type,detail,severity
 ### macOS & Linux
 
 ```bash
-npm install -g argus
+npm install -g argus-monitor
 argus install
 argus start
 argus status
@@ -160,7 +160,7 @@ argus status
 ### One-liner
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yourusername/argus/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/cortexark/argus/main/install.sh | bash
 ```
 
 The installer will:
@@ -366,7 +366,7 @@ All tests are in `/tests`. The test suite includes:
 - Unit tests for classifiers, monitors, and utilities
 - Integration tests for database operations
 - E2E tests for CLI commands
-- **238 tests, 0 failures**
+- **426 tests, 0 failures**
 
 ### Test Coverage
 
@@ -468,7 +468,7 @@ export const notify = {
 
 ```bash
 argus uninstall
-npm uninstall -g argus
+npm uninstall -g argus-monitor
 rm -rf ~/.argus
 ```
 

@@ -451,6 +451,7 @@
     .sev-documents    { background: var(--sev-medium-bg);  color: var(--sev-medium);   border: 1px solid var(--sev-medium-bd); }
     .sev-unknown      { background: var(--sev-low-bg);     color: var(--blue);         border: 1px solid var(--sev-low-bd); }
     .sev-ok           { background: var(--sev-ok-bg);      color: var(--sev-ok);       border: 1px solid var(--sev-ok-bd); }
+    .sev-running      { background: rgba(88,166,255,0.1);  color: var(--blue);         border: 1px solid rgba(88,166,255,0.3); }
 
     .verdict-chip {
       font-size: 9px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase;
@@ -549,6 +550,10 @@
     <span class="tab-icon">&#128268;</span> Ports
     <span class="tab-badge" id="badge-ports"></span>
   </div>
+  <div class="tab" data-tab="sessions">
+    <span class="tab-icon">&#128336;</span> Sessions
+    <span class="tab-badge" id="badge-sessions"></span>
+  </div>
 </nav>
 
 <!-- ── Main Content ───────────────────────────────────────────── -->
@@ -567,36 +572,36 @@
     </div>
 
     <div class="kpi-row">
-      <div class="kpi-card" style="--card-accent: var(--sev-ok)">
+      <div class="kpi-card" style="--card-accent: var(--sev-ok); cursor:pointer" onclick="switchTab('processes')" title="Click to view processes">
         <div class="kpi-label">Active AI Apps <span class="kpi-delta neutral" id="deltaProcs">—</span></div>
         <div class="kpi-value" id="statProcesses">—</div>
-        <div class="kpi-sub">detected last 24h</div>
+        <div class="kpi-sub">detected last 24h ↗</div>
       </div>
-      <div class="kpi-card" style="--card-accent: var(--sev-critical)">
+      <div class="kpi-card" style="--card-accent: var(--sev-critical); cursor:pointer" onclick="switchTab('files')" title="Click to view file alerts">
         <div class="kpi-label">File Alerts <span class="kpi-delta neutral" id="deltaAlerts">—</span></div>
         <div class="kpi-value" id="statAlerts">—</div>
-        <div class="kpi-sub">sensitive accesses 24h</div>
+        <div class="kpi-sub">sensitive accesses 24h ↗</div>
       </div>
-      <div class="kpi-card" style="--card-accent: var(--blue)">
+      <div class="kpi-card" style="--card-accent: var(--blue); cursor:pointer" onclick="switchTab('network')" title="Click to view network events">
         <div class="kpi-label">Network Events <span class="kpi-delta neutral" id="deltaNet">—</span></div>
         <div class="kpi-value" id="statNetwork">—</div>
-        <div class="kpi-sub">connections 24h</div>
+        <div class="kpi-sub">connections 24h ↗</div>
       </div>
-      <div class="kpi-card" style="--card-accent: var(--sev-high)">
+      <div class="kpi-card" style="--card-accent: var(--sev-high); cursor:pointer" onclick="switchTab('files')" title="Click to view file alerts">
         <div class="kpi-label">Injection Alerts <span class="kpi-delta neutral" id="deltaInj">—</span></div>
         <div class="kpi-value" id="statInjections">—</div>
-        <div class="kpi-sub">prompt injections 24h</div>
+        <div class="kpi-sub">prompt injections 24h ↗</div>
       </div>
     </div>
 
-    <!-- Approval Panel -->
+    <!-- Sensitive Access Review Panel -->
     <div class="approval-panel" id="approvalPanel">
       <div class="approval-header">
         <span class="approval-header-icon">&#9888;</span>
-        <span class="approval-header-title">User Approval Required — sensitive file access detected</span>
+        <span class="approval-header-title">Sensitive Access Detected — mark each as expected or suspicious</span>
         <span class="approval-count-badge" id="approvalCount">0</span>
       </div>
-      <div id="approvalList"><div class="approval-empty">No pending approvals — all accesses reviewed</div></div>
+      <div id="approvalList"><div class="approval-empty">No sensitive access events to review</div></div>
     </div>
 
     <!-- AI App Activity -->
@@ -684,6 +689,24 @@
     </div>
   </section>
 
+  <!-- ── SESSIONS ──────────────────────────────────────────────── -->
+  <section class="section" id="tab-sessions">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>AI Application</th>
+            <th>Started</th>
+            <th>Ended</th>
+            <th>Duration</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="sessionTable"><tr class="empty-row"><td colspan="5">Loading sessions...</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
 </main>
 
 <!-- ── Report Modal ───────────────────────────────────────────── -->
@@ -761,14 +784,19 @@ function sevBadge(sens) {
 }
 
 /* ── Tab switching ───────────────────────────────────────────── */
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelectorAll('.section').forEach(function(s) { s.classList.remove('active'); });
+  var tabEl = document.querySelector('.tab[data-tab="' + name + '"]');
+  if (tabEl) tabEl.classList.add('active');
+  var target = document.getElementById('tab-' + name);
+  if (target) target.classList.add('active');
+}
+// Expose to global scope so inline onclick attributes on KPI cards can call it
+window.switchTab = switchTab;
+
 document.querySelectorAll('.tab').forEach(function(tab) {
-  tab.addEventListener('click', function() {
-    document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
-    document.querySelectorAll('.section').forEach(function(s) { s.classList.remove('active'); });
-    tab.classList.add('active');
-    var target = document.getElementById('tab-' + tab.dataset.tab);
-    if (target) target.classList.add('active');
-  });
+  tab.addEventListener('click', function() { switchTab(tab.dataset.tab); });
 });
 
 /* ── Badge helpers ───────────────────────────────────────────── */
@@ -997,16 +1025,17 @@ function refreshApprovals() {
 
       var acts = document.createElement('div'); acts.className = 'approval-actions';
       if (item.decision === 'pending') {
-        var ok = document.createElement('button'); ok.className = 'btn-approve'; ok.textContent = 'Approve';
+        var ok = document.createElement('button'); ok.className = 'btn-approve'; ok.textContent = 'Expected';
+        ok.title = 'Mark as expected \u2014 this access was intentional';
         ok.onclick = function() { decide(item.id, 'approved'); };
-        var no = document.createElement('button'); no.className = 'btn-deny'; no.textContent = 'Deny';
+        var no = document.createElement('button'); no.className = 'btn-deny'; no.textContent = 'Suspicious';
+        no.title = 'Flag as suspicious \u2014 this access looks wrong';
         no.onclick = function() { decide(item.id, 'denied'); };
         acts.appendChild(ok); acts.appendChild(no);
       } else {
         var chip = document.createElement('span');
         chip.className = 'decision-chip ' + item.decision;
-        chip.textContent = item.decision === 'approved' ? '&#10003; Approved' : '&#10005; Denied';
-        chip.innerHTML = item.decision === 'approved' ? '&#10003; Approved' : '&#10005; Denied';
+        chip.textContent = item.decision === 'approved' ? '\u2713 Expected' : '\u26a0 Suspicious';
         acts.appendChild(chip);
       }
 
@@ -1073,11 +1102,57 @@ function refreshActivity() {
   }).catch(function() {});
 }
 
+/* ── Sessions ────────────────────────────────────────────────── */
+function fmtDuration(seconds) {
+  if (seconds == null) return '\u2014';
+  var s = Math.max(0, seconds);
+  if (s < 60) return s + 's';
+  if (s < 3600) return Math.floor(s / 60) + 'm ' + (s % 60) + 's';
+  return Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm';
+}
+
+function refreshSessions() {
+  return fetchJSON('/api/sessions').then(function(sessions) {
+    var tbody = document.getElementById('sessionTable');
+    var badgeEl = document.getElementById('badge-sessions');
+    tbody.textContent = '';
+    var running = sessions.filter(function(s) { return !s.ended_at; }).length;
+    if (badgeEl) badgeEl.textContent = running > 0 ? running : '';
+    if (!sessions.length) {
+      var row = document.createElement('tr'); row.className = 'empty-row';
+      var cell = document.createElement('td'); cell.colSpan = 5;
+      cell.textContent = 'No sessions recorded yet';
+      row.appendChild(cell); tbody.appendChild(row); return;
+    }
+    sessions.forEach(function(s) {
+      var tr = document.createElement('tr');
+      if (!s.ended_at) tr.style.fontWeight = '600';
+
+      var appTd = document.createElement('td'); appTd.textContent = s.app_label;
+      var startTd = document.createElement('td'); startTd.className = 'mono'; startTd.textContent = fmtDateTime(s.started_at);
+      var endTd = document.createElement('td'); endTd.className = 'mono';
+      endTd.textContent = s.ended_at ? fmtDateTime(s.ended_at) : '\u2014';
+      var durTd = document.createElement('td'); durTd.className = 'mono';
+      durTd.textContent = fmtDuration(s.duration_seconds);
+      var statusTd = document.createElement('td');
+      var badge = document.createElement('span');
+      badge.className = s.ended_at ? 'sev sev-ok' : 'sev sev-running';
+      badge.textContent = s.ended_at ? 'Ended' : 'Running';
+      statusTd.appendChild(badge);
+
+      tr.appendChild(appTd); tr.appendChild(startTd); tr.appendChild(endTd);
+      tr.appendChild(durTd); tr.appendChild(statusTd);
+      tbody.appendChild(tr);
+    });
+  }).catch(function() {});
+}
+
 /* ── Full refresh ────────────────────────────────────────────── */
 function refreshAll() {
   return Promise.all([
     refreshStatus(), refreshProcesses(), refreshAlerts(),
     refreshNetwork(), refreshPorts(), refreshActivity(), refreshApprovals(),
+    refreshSessions(),
   ]);
 }
 

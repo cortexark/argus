@@ -3,9 +3,12 @@
  * Used to identify and label AI app activity
  */
 export const AI_APPS = {
-  // Claude
-  'claude': { name: 'Claude (Anthropic)', category: 'LLM Desktop' },
-  'Claude': { name: 'Claude (Anthropic)', category: 'LLM Desktop' },
+  // Claude — CLI binary is 'claude', desktop app is 'Claude'
+  'claude': { name: 'Claude Code (CLI)', category: 'AI Code Editor' },
+  'Claude': { name: 'Claude Desktop', category: 'LLM Desktop' },
+
+  // OpenAI Codex CLI
+  'codex': { name: 'OpenAI Codex (CLI)', category: 'AI Code Editor' },
 
   // Cursor
   'cursor': { name: 'Cursor AI Editor', category: 'AI Code Editor' },

@@ -64,7 +64,7 @@ jobs:
             ## Install
 
             ```bash
-            npm install -g argus
+            npm install -g argus-monitor
             argus install && argus start
             ```
 

@@ -57,7 +57,7 @@ export const config = Object.freeze({
   MAX_EVENTS_IN_MEMORY: 1000,
   AI_KEYWORDS: Object.freeze([
     'claude', 'openai', 'langchain', 'llama', 'gpt', 'copilot',
-    'agent', 'anthropic', 'mistral', 'ollama', 'cursor', 'windsurf',
+    'agent', 'anthropic', 'mistral', 'ollama', 'cursor', 'windsurf', 'codex',
   ]),
 });
 
