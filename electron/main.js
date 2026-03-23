@@ -29,8 +29,9 @@ app.whenReady().then(async () => {
   // Start the Argus monitoring backend
   let argusStop = null;
   try {
-    const { start } = await import('../src/index.js');
-    argusStop = await start({ noWatch: false, noWeb: false, noNotify: false, noIpc: false });
+    const { start, stop } = await import('../src/index.js');
+    await start({ noWatch: false, noWeb: false, noNotify: false, noIpc: false });
+    argusStop = stop;
   } catch (err) {
     console.error('[Argus] Backend failed to start:', err.message);
     // Continue — the tray will show connection error in UI
@@ -63,7 +64,7 @@ app.whenReady().then(async () => {
   });
 
   mb.on('ready', () => {
-    setupTray(mb, { stop: argusStop });
+    setupTray(mb);
   });
 
   mb.on('after-show', () => {

@@ -16,7 +16,7 @@ import { scanProcesses } from './monitors/process-scanner.js';
 import { scanAIProcessFiles } from './monitors/file-monitor.js';
 import { scanAINetworkConnections } from './monitors/network-monitor.js';
 import { updatePortHistory } from './monitors/port-tracker.js';
-import { insertProcessSnapshot, insertFileAccess } from './db/store.js';
+import { insertProcessSnapshot, insertFileAccess, insertSession, closeSession } from './db/store.js';
 import { PLATFORM_SENSITIVE_PATHS } from './lib/platform.js';
 import { startUnifiedLogMonitor } from './monitors/unified-log-monitor.js';
 import { COMMON_PORTS } from './ai-apps.js';
@@ -27,6 +27,21 @@ function isCommonPort(port) {
   return COMMON_PORTS.has(Number(port));
 }
 
+/**
+ * Format a duration in milliseconds to a human-readable string.
+ * @param {number} ms
+ * @returns {string} e.g. "4m 32s", "1h 12m", "< 1m"
+ */
+function formatDuration(ms) {
+  const totalSeconds = Math.floor(ms / 1000);
+  if (totalSeconds < 60) return '< 1m';
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m ${seconds}s`;
+}
+
 let intervals = [];
 let db = null;
 let ipcServer = null;
@@ -34,8 +49,14 @@ let fsWatcher = null;
 let unifiedLogMonitor = null;
 let digestHandle = null;
 
+// Shared controller — passed to the web server so /api/monitoring/toggle can flip it
+export const controller = { paused: false };
+
 // Track which AI app processes we've already notified about (to fire newAppDetected only once)
 const knownProcesses = new Set();
+
+// Track active sessions: pid → { id, appLabel } — persisted to session_history table
+const activeSessions = new Map();
 
 /**
  * Start all monitoring loops.
@@ -68,7 +89,7 @@ export async function start(opts = {}) {
   if (!opts.noWeb) {
     try {
       const webModule = await import('./web/server.js');
-      web = webModule.startWebServer(db);
+      web = webModule.startWebServer(db, undefined, controller);
       info(`Web dashboard at http://localhost:${webModule.WEB_PORT}`);
     } catch (err) {
       warn(`Web server failed to start: ${err.message}`);
@@ -87,9 +108,28 @@ export async function start(opts = {}) {
 
   // Process scanner loop
   const processInterval = setInterval(async () => {
+    if (controller.paused) return;
     try {
       const processes = await scanProcesses();
       const now = new Date().toISOString();
+      const currentPids = new Set(processes.map((p) => p.pid));
+
+      // Close sessions for processes that have exited
+      for (const [pid, session] of activeSessions) {
+        if (!currentPids.has(pid)) {
+          try {
+            closeSession(db, session.id, now);
+            // Notify that the app session ended
+            if (notifyModule && session.startedAt) {
+              const durationMs = new Date(now).getTime() - new Date(session.startedAt).getTime();
+              const durationStr = formatDuration(durationMs);
+              notifyModule.notify.appSessionEnded(session.appLabel, durationStr);
+            }
+          } catch { /* ignore */ }
+          activeSessions.delete(pid);
+        }
+      }
+
       for (const proc of processes) {
         insertProcessSnapshot(db, {
           pid: proc.pid,
@@ -100,6 +140,20 @@ export async function start(opts = {}) {
           memory: proc.memory ?? null,
           timestamp: now,
         });
+
+        // Open a new session record the first time we see this pid
+        if (!activeSessions.has(proc.pid) && proc.appLabel) {
+          try {
+            const s = insertSession(db, {
+              pid: proc.pid,
+              appLabel: proc.appLabel,
+              processName: proc.name,
+              cmd: proc.cmd || null,
+              startedAt: now,
+            });
+            activeSessions.set(proc.pid, { id: s.id, appLabel: proc.appLabel, startedAt: now });
+          } catch { /* ignore */ }
+        }
 
         // Notify on new AI app process
         if (notifyModule && proc.appLabel && !knownProcesses.has(proc.appLabel)) {
@@ -119,6 +173,7 @@ export async function start(opts = {}) {
 
   // File monitor loop — fires specific alerts per sensitivity category
   const fileInterval = setInterval(async () => {
+    if (controller.paused) return;
     try {
       const processes = await scanProcesses();
       const { alertCount, alerts } = await scanAIProcessFiles(db, processes);
@@ -165,6 +220,7 @@ export async function start(opts = {}) {
 
   // Network monitor loop — surfaces destination, port, and unknown host warnings
   const networkInterval = setInterval(async () => {
+    if (controller.paused) return;
     try {
       const processes = await scanProcesses();
       const events = await scanAINetworkConnections(db, processes);

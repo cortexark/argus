@@ -18,10 +18,10 @@ import {
   getRecentAlerts,
   getActiveProcesses,
   getNetworkEvents,
+  setApprovalDecision,
+  getApprovalDecisions,
+  getRecentSessions,
 } from '../db/store.js';
-
-// In-memory approval decisions: alertId -> 'approved' | 'denied'
-const approvalDecisions = new Map();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -190,7 +190,7 @@ function getAllPortHistory(db) {
  * @param {number} [port] - Port override (defaults to WEB_PORT)
  * @returns {{ server: import('node:http').Server, broadcast: (event: object) => void }}
  */
-export function startWebServer(db, port) {
+export function startWebServer(db, port, controller = null) {
   const listenPort = port != null ? port : WEB_PORT;
   const broadcaster = createBroadcaster();
 
@@ -240,15 +240,30 @@ export function startWebServer(db, port) {
       const sinceISO = since24h();
       let processCount = 0;
       let alertCount = 0;
+      let hasCritical = false;
       try { processCount = getActiveProcesses(db, sinceISO).length; } catch { /* ignore */ }
-      try { alertCount = getRecentAlerts(db, sinceISO).length; } catch { /* ignore */ }
+      try {
+        const alerts = getRecentAlerts(db, sinceISO);
+        alertCount = alerts.length;
+        hasCritical = alerts.some(a =>
+          a.sensitivity === 'credentials' || a.sensitivity === 'browserData',
+        );
+      } catch { /* ignore */ }
 
       sendJson(res, 200, {
         running: true,
+        paused: controller ? controller.paused : false,
         uptime: Math.floor(process.uptime()),
         processCount,
         alertCount,
+        hasCritical,
       }, allowOrigin);
+      return;
+    }
+
+    if (path === '/api/monitoring/toggle' && method === 'POST') {
+      if (controller) controller.paused = !controller.paused;
+      sendJson(res, 200, { paused: controller ? controller.paused : false }, allowOrigin);
       return;
     }
 
@@ -298,12 +313,13 @@ export function startWebServer(db, port) {
     // Approvals: GET pending, POST approve/deny
     if (path === '/api/approvals' && method === 'GET') {
       let alerts = [];
+      let decisions = new Map();
       try { alerts = getRecentAlerts(db, since24h()); } catch { /* ignore */ }
-      // Return sensitive alerts with their approval status
+      try { decisions = getApprovalDecisions(db); } catch { /* ignore */ }
       const pending = alerts
         .filter(a => a.sensitivity === 'credentials' || a.sensitivity === 'browserData')
         .slice(0, 20)
-        .map(a => ({ ...a, decision: approvalDecisions.get(a.id) || 'pending' }));
+        .map(a => ({ ...a, decision: decisions.get(a.id) || 'pending' }));
       sendJson(res, 200, pending, allowOrigin);
       return;
     }
@@ -317,12 +333,20 @@ export function startWebServer(db, port) {
           if (!id || !['approved', 'denied'].includes(decision)) {
             res.writeHead(400); res.end('Bad Request'); return;
           }
-          approvalDecisions.set(Number(id), decision);
+          setApprovalDecision(db, Number(id), decision);
           sendJson(res, 200, { ok: true, id, decision }, allowOrigin);
         } catch {
           res.writeHead(400); res.end('Bad Request');
         }
       });
+      return;
+    }
+
+    // Session history
+    if (path === '/api/sessions' && method === 'GET') {
+      let sessions = [];
+      try { sessions = getRecentSessions(db); } catch { /* ignore */ }
+      sendJson(res, 200, sessions, allowOrigin);
       return;
     }
 
@@ -335,11 +359,16 @@ export function startWebServer(db, port) {
       try { alerts = getRecentAlerts(db, since24h()); } catch { /* ignore */ }
       try { ports = getAllPortHistory(db); } catch { /* ignore */ }
 
-      // Group by app_label
+      // Group by app_label — seed from processes, then fill from alerts/ports
       const byApp = {};
       for (const p of processes) {
         const label = p.app_label || p.name;
         if (!byApp[label]) byApp[label] = { label, category: p.category, ports: [], files: [] };
+      }
+      // Ensure apps that generated alerts are always represented
+      for (const a of alerts) {
+        const label = a.app_label || a.process_name;
+        if (label && !byApp[label]) byApp[label] = { label, category: 'Unknown', ports: [], files: [] };
       }
       for (const p of ports) {
         const label = p.app_label || p.process_name;
@@ -347,7 +376,7 @@ export function startWebServer(db, port) {
       }
       for (const a of alerts) {
         const label = a.app_label || a.process_name;
-        if (byApp[label]) {
+        if (label && byApp[label]) {
           byApp[label].files.push({ path: a.file_path, sensitivity: a.sensitivity, ts: a.timestamp });
         }
       }
