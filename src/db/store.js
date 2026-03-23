@@ -21,8 +21,8 @@ function getStmts(db) {
       VALUES (@pid, @processName, @appLabel, @filePath, @accessType, @sensitivity, @isAlert, @timestamp)
     `),
     insertNetworkEvent: db.prepare(`
-      INSERT INTO network_events (pid, process_name, app_label, local_address, remote_address, remote_host, port, protocol, state, ai_service, timestamp)
-      VALUES (@pid, @processName, @appLabel, @localAddress, @remoteAddress, @remoteHost, @port, @protocol, @state, @aiService, @timestamp)
+      INSERT INTO network_events (pid, process_name, app_label, local_address, remote_address, remote_host, port, protocol, state, ai_service, bytes_sent, bytes_received, timestamp)
+      VALUES (@pid, @processName, @appLabel, @localAddress, @remoteAddress, @remoteHost, @port, @protocol, @state, @aiService, @bytesSent, @bytesReceived, @timestamp)
     `),
     upsertPortHistory: db.prepare(`
       INSERT INTO port_history (process_name, app_label, port, first_seen, last_seen, connection_count)
@@ -86,6 +86,28 @@ function getStmts(db) {
       WHERE timestamp >= ?
       ORDER BY timestamp DESC
       LIMIT 200
+    `),
+    setApprovalDecision: db.prepare(`
+      INSERT OR REPLACE INTO approval_decisions (alert_id, decision, decided_at)
+      VALUES (@alertId, @decision, @decidedAt)
+    `),
+    getApprovalDecisions: db.prepare(`
+      SELECT alert_id, decision FROM approval_decisions
+    `),
+    insertSession: db.prepare(`
+      INSERT INTO session_history (pid, app_label, process_name, cmd, started_at)
+      VALUES (@pid, @appLabel, @processName, @cmd, @startedAt)
+    `),
+    closeSession: db.prepare(`
+      UPDATE session_history
+      SET ended_at = @endedAt,
+          duration_seconds = CAST((julianday(@endedAt) - julianday(started_at)) * 86400 AS INTEGER)
+      WHERE id = @id
+    `),
+    getRecentSessions: db.prepare(`
+      SELECT * FROM session_history
+      ORDER BY started_at DESC
+      LIMIT 100
     `),
   };
 
@@ -233,6 +255,61 @@ export function getInjectionAlerts(db, sinceISO) {
   return stmts.getInjectionAlerts.all(sinceISO);
 }
 
+/**
+ * Persist an approval decision for an alert.
+ * @param {import('better-sqlite3').Database} db
+ * @param {number} alertId
+ * @param {string} decision - 'approved' | 'denied'
+ */
+/**
+ * Insert a new session record when an AI process is first detected.
+ * @param {import('better-sqlite3').Database} db
+ * @param {{ pid, appLabel, processName, cmd, startedAt }} session
+ * @returns {object} New object with id added
+ */
+export function insertSession(db, session) {
+  const stmts = getStmts(db);
+  const info = stmts.insertSession.run(session);
+  return { ...session, id: info.lastInsertRowid };
+}
+
+/**
+ * Close a session by setting its ended_at and computing duration.
+ * @param {import('better-sqlite3').Database} db
+ * @param {number} id
+ * @param {string} endedAt - ISO timestamp
+ */
+export function closeSession(db, id, endedAt) {
+  const stmts = getStmts(db);
+  stmts.closeSession.run({ id, endedAt });
+}
+
+/**
+ * Get the 100 most recent sessions, newest first.
+ * @param {import('better-sqlite3').Database} db
+ * @returns {object[]}
+ */
+export function getRecentSessions(db) {
+  const stmts = getStmts(db);
+  return stmts.getRecentSessions.all();
+}
+
+export function setApprovalDecision(db, alertId, decision) {
+  const stmts = getStmts(db);
+  stmts.setApprovalDecision.run({ alertId, decision, decidedAt: new Date().toISOString() });
+}
+
+/**
+ * Get all approval decisions as a Map of alertId → decision.
+ * @param {import('better-sqlite3').Database} db
+ * @returns {Map<number, string>}
+ */
+export function getApprovalDecisions(db) {
+  const stmts = getStmts(db);
+  const rows = stmts.getApprovalDecisions.all();
+  return new Map(rows.map((r) => [r.alert_id, r.decision]));
+}
+
 export default {
   insertProcessSnapshot,
   insertFileAccess,
@@ -245,4 +322,7 @@ export default {
   getDailySummary,
   insertInjectionAlert,
   getInjectionAlerts,
+  insertSession,
+  closeSession,
+  getRecentSessions,
 };

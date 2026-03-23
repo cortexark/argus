@@ -10,6 +10,7 @@ import psList from 'ps-list';
 import { AI_APPS } from '../ai-apps.js';
 import { config } from '../lib/config.js';
 import { classifyProcess as classifyProcessSignals, VERDICT } from './process-classifier.js';
+import { getProcessAncestry, formatAncestryChain } from '../lib/process-ancestry.js';
 
 /**
  * Classify a single process object.
@@ -70,6 +71,16 @@ export async function scanProcesses() {
     const classified = classifyProcess(proc);
     if (classified === null) continue;
 
+    // Resolve process ancestry chain
+    let ancestry = [];
+    let ancestryChain = '';
+    try {
+      ancestry = await getProcessAncestry(proc.pid);
+      ancestryChain = formatAncestryChain(ancestry);
+    } catch {
+      // Ancestry lookup failed — continue without it
+    }
+
     // Enrich runtime processes with the 6-signal classifier for higher fidelity
     if (RUNTIME_NAMES.has(proc.name.toLowerCase())) {
       try {
@@ -78,16 +89,16 @@ export async function scanProcesses() {
         if (enriched.verdict === VERDICT.NOT_AI) {
           // Skip processes the scorer considers definitely not AI
           // But keep CONFIRMED/LIKELY matches from name-based detection
-          results.push({ ...classified, score: enriched.score, verdict: enriched.verdict, signals: enriched.signals });
+          results.push({ ...classified, score: enriched.score, verdict: enriched.verdict, signals: enriched.signals, ancestry, ancestryChain });
         } else {
-          results.push({ ...classified, score: enriched.score, verdict: enriched.verdict, signals: enriched.signals });
+          results.push({ ...classified, score: enriched.score, verdict: enriched.verdict, signals: enriched.signals, ancestry, ancestryChain });
         }
       } catch {
         // Classifier failed — fall back to basic result
-        results.push(classified);
+        results.push({ ...classified, ancestry, ancestryChain });
       }
     } else {
-      results.push(classified);
+      results.push({ ...classified, ancestry, ancestryChain });
     }
   }
 

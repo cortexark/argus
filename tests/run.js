@@ -26,6 +26,14 @@ const testFiles = [
   './db/queries.test.js',
   './lib/baseline-engine.test.js',
   './cli/export.test.js',
+  './lib/policy-engine.test.js',
+  './lib/process-ancestry.test.js',
+  './monitors/canary-monitor.test.js',
+  './monitors/cloud-sync-detector.test.js',
+  './lib/user-config.test.js',
+  './cli/ci-check.test.js',
+  './build/build-config.test.js',
+  './build/build-output.test.js',
 ];
 
 let totalPassed = 0;

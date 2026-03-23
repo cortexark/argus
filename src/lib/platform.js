@@ -93,6 +93,29 @@ export const PLATFORM_SENSITIVE_PATHS = IS_LINUX
     };
 
 /**
+ * Cloud sync directory paths by provider.
+ * Used to detect when AI agents access cloud-synced folders,
+ * which means data may silently leave the machine.
+ */
+export const CLOUD_SYNC_PATHS = IS_MAC
+  ? [
+      { path: `${HOME}/Library/Mobile Documents/com~apple~CloudDocs`, provider: 'iCloud' },
+      { path: `${HOME}/Library/Mobile Documents`, provider: 'iCloud' },
+      { path: `${HOME}/Library/CloudStorage`, provider: 'CloudStorage' },
+      { path: `${HOME}/Dropbox`, provider: 'Dropbox' },
+      { path: `${HOME}/Google Drive`, provider: 'Google Drive' },
+      { path: `${HOME}/OneDrive`, provider: 'OneDrive' },
+    ]
+  : IS_LINUX
+    ? [
+        { path: `${HOME}/Dropbox`, provider: 'Dropbox' },
+        { path: `${HOME}/Google Drive`, provider: 'Google Drive' },
+        { path: `${HOME}/OneDrive`, provider: 'OneDrive' },
+        { path: `${HOME}/.local/share/dropbox`, provider: 'Dropbox' },
+      ]
+    : [];
+
+/**
  * Platform label for display/reporting.
  */
 export const PLATFORM_LABEL = IS_MAC ? 'macOS' : IS_LINUX ? 'Linux' : 'Unknown';

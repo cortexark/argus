@@ -1,0 +1,10 @@
+{
+  "_comment": "Place this file at ~/.argus/config.json to customize Argus",
+  "sensitive_paths": {
+    "credentials": [],
+    "documents": [],
+    "system": []
+  },
+  "ai_endpoints": [],
+  "ai_apps": {}
+}
