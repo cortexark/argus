@@ -1,0 +1,12 @@
+{
+  "language": "javascript",
+  "framework": "electron",
+  "build_command": "node --experimental-vm-modules tests/run.js",
+  "test_command": "node --experimental-vm-modules tests/run.js",
+  "source_extensions": [".js", ".html"],
+  "stub_scan_extensions": ["--include=*.js"],
+  "detected_at": "2026-03-21T10:00:00Z",
+  "detected_from": "package.json",
+  "repo": "cortexark/argus",
+  "version": "1.0.0"
+}
