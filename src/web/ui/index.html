@@ -532,6 +532,50 @@
     .modal-body { padding: 20px; overflow: auto; flex: 1; }
     .report-pre { font-family: var(--font-mono); font-size: 11px; white-space: pre-wrap; word-break: break-all; color: var(--text); line-height: 1.7; }
 
+    /* ── App Filter Bar ────────────────────────────────────────────── */
+    .filter-bar {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .filter-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text3);
+      white-space: nowrap;
+    }
+    .filter-chips {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .filter-chip {
+      background: var(--bg4);
+      border: 1px solid var(--border);
+      border-radius: var(--r-full);
+      padding: 3px 12px;
+      font-size: 11px;
+      font-family: var(--font-body);
+      color: var(--text2);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .filter-chip:hover {
+      border-color: var(--border2);
+      color: var(--text);
+    }
+    .filter-chip.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: var(--bg);
+      font-weight: 600;
+    }
+
     /* ── Usage Cards ──────────────────────────────────────────────── */
     .usage-tool-cards {
       display: grid;
@@ -669,6 +713,14 @@
     <span class="tab-badge" id="badge-usage"></span>
   </div>
 </nav>
+
+<!-- ── App Filter Bar ────────────────────────────────────────── -->
+<div class="filter-bar" id="filterBar">
+  <span class="filter-label">Filter by app:</span>
+  <div class="filter-chips" id="filterChips">
+    <button class="filter-chip active" data-app="all">All Apps</button>
+  </div>
+</div>
 
 <!-- ── Main Content ───────────────────────────────────────────── -->
 <main>
@@ -1113,10 +1165,13 @@ function refreshProcesses() {
     var tbody = document.getElementById('processTable');
     tbody.textContent = '';
     if (!data.length) { tbody.appendChild(emptyRow(3, 'No AI processes detected in last 24h')); return; }
+    var appNames = [];
     data.forEach(function(p) {
+      var label = p.app_label || p.name || '--';
+      appNames.push(label);
       var tr = document.createElement('tr');
       var nameCell = document.createElement('td');
-      nameCell.innerHTML = '<strong>' + esc(p.app_label || p.name || '--') + '</strong>';
+      nameCell.innerHTML = '<strong>' + esc(label) + '</strong>';
       var catCell = td(p.category || '--');
       catCell.style.color = 'var(--text2)'; catCell.style.fontSize = '11px';
       var verdCell = document.createElement('td');
@@ -1130,6 +1185,7 @@ function refreshProcesses() {
       tr.appendChild(nameCell); tr.appendChild(catCell); tr.appendChild(verdCell);
       tbody.appendChild(tr);
     });
+    updateFilterChips(appNames);
   }).catch(function() {});
 }
 
@@ -1703,13 +1759,74 @@ function refreshUsage() {
   }).catch(function() {});
 }
 
+/* ── App Filter ──────────────────────────────────────────────── */
+var activeFilter = 'all';
+var knownApps = new Set();
+
+function updateFilterChips(apps) {
+  apps.forEach(function(a) { if (a) knownApps.add(a); });
+  var container = document.getElementById('filterChips');
+  if (!container) return;
+  var existing = container.querySelectorAll('.filter-chip');
+  var existingApps = new Set();
+  existing.forEach(function(el) { existingApps.add(el.dataset.app); });
+
+  knownApps.forEach(function(appName) {
+    if (existingApps.has(appName)) return;
+    var chip = document.createElement('button');
+    chip.className = 'filter-chip';
+    chip.dataset.app = appName;
+    chip.textContent = appName;
+    chip.addEventListener('click', function() { setAppFilter(appName); });
+    container.appendChild(chip);
+  });
+}
+
+function setAppFilter(app) {
+  activeFilter = app;
+  document.querySelectorAll('.filter-chip').forEach(function(el) {
+    el.classList.toggle('active', el.dataset.app === app);
+  });
+  applyFilter();
+}
+
+function applyFilter() {
+  var tables = ['alertTable', 'networkTable', 'portTable', 'sessionTable', 'usageSessionTable'];
+  tables.forEach(function(id) {
+    var tbody = document.getElementById(id);
+    if (!tbody) return;
+    var rows = tbody.querySelectorAll('tr');
+    rows.forEach(function(row) {
+      if (row.classList.contains('empty-row')) return;
+      if (activeFilter === 'all') { row.style.display = ''; return; }
+      var text = row.textContent || '';
+      row.style.display = text.indexOf(activeFilter) !== -1 ? '' : 'none';
+    });
+  });
+
+  // Filter activity cards
+  var activityCards = document.querySelectorAll('#activityGrid > div');
+  activityCards.forEach(function(card) {
+    if (activeFilter === 'all') { card.style.display = ''; return; }
+    var text = card.textContent || '';
+    card.style.display = text.indexOf(activeFilter) !== -1 ? '' : 'none';
+  });
+}
+
+// Wire up the "All Apps" chip
+document.querySelector('.filter-chip[data-app="all"]').addEventListener('click', function() {
+  setAppFilter('all');
+});
+
 /* ── Full refresh ────────────────────────────────────────────── */
 function refreshAll() {
   return Promise.all([
     refreshStatus(), refreshProcesses(), refreshAlerts(),
     refreshNetwork(), refreshPorts(), refreshActivity(), refreshApprovals(),
     refreshSessions(), refreshUsage(),
-  ]);
+  ]).then(function() {
+    applyFilter();
+  });
 }
 
 var REFRESH_INTERVAL_MS = 5000;
