@@ -1,0 +1,166 @@
+<testsuites id="" name="" tests="23" failures="0" skipped="1" errors="0" time="6.026314999999999">
+<testsuite name="dashboard.spec.js" timestamp="2026-03-18T19:58:26.488Z" hostname="chromium" tests="23" failures="0" skipped="1" time="4.987" errors="0">
+<testcase name="Smoke test — all tabs load › page loads and header is visible" classname="dashboard.spec.js" time="0.919">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/dashboard-Smoke-test-—-all-1d61b-loads-and-header-is-visible-chromium/test-finished-1.png]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Smoke test — all tabs load › Overview tab is active by default" classname="dashboard.spec.js" time="0.109">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/dashboard-Smoke-test-—-all-11674-ew-tab-is-active-by-default-chromium/test-finished-1.png]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Smoke test — all tabs load › Processes tab loads without errors" classname="dashboard.spec.js" time="0.174">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/dashboard-Smoke-test-—-all-e0bf6-es-tab-loads-without-errors-chromium/test-finished-1.png]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Smoke test — all tabs load › File Alerts tab loads without errors" classname="dashboard.spec.js" time="0.194">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/dashboard-Smoke-test-—-all-83397-ts-tab-loads-without-errors-chromium/test-finished-1.png]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Smoke test — all tabs load › Network tab loads without errors" classname="dashboard.spec.js" time="0.175">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/dashboard-Smoke-test-—-all-c8c04-rk-tab-loads-without-errors-chromium/test-finished-1.png]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Smoke test — all tabs load › Ports tab loads without errors" classname="dashboard.spec.js" time="0.195">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/dashboard-Smoke-test-—-all-e551d-ts-tab-loads-without-errors-chromium/test-finished-1.png]]
+]]>
+</system-out>
+</testcase>
+<testcase name="KPI card navigation › Active AI Apps card navigates to Processes tab" classname="dashboard.spec.js" time="0.212">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/dashboard-KPI-card-navigat-43d6c--navigates-to-Processes-tab-chromium/test-finished-1.png]]
+]]>
+</system-out>
+</testcase>
+<testcase name="KPI card navigation › File Alerts KPI card navigates to File Alerts tab" classname="dashboard.spec.js" time="0.211">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/dashboard-KPI-card-navigat-72cfa-avigates-to-File-Alerts-tab-chromium/test-finished-1.png]]
+]]>
+</system-out>
+</testcase>
+<testcase name="KPI card navigation › Network Events KPI card navigates to Network tab" classname="dashboard.spec.js" time="0.192">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/dashboard-KPI-card-navigat-a0bd3-rd-navigates-to-Network-tab-chromium/test-finished-1.png]]
+]]>
+</system-out>
+</testcase>
+<testcase name="KPI card navigation › KPI cards have cursor:pointer style (are clickable)" classname="dashboard.spec.js" time="0.142">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/dashboard-KPI-card-navigat-608c3-ointer-style-are-clickable--chromium/test-finished-1.png]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Activity overview section › AI App Activity section is visible on Overview tab" classname="dashboard.spec.js" time="0.155">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/dashboard-Activity-overvie-21bad--is-visible-on-Overview-tab-chromium/test-finished-1.png]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Activity overview section › Activity grid shows AI app cards when apps are detected" classname="dashboard.spec.js" time="0.539">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/dashboard-Activity-overvie-98a07-ards-when-apps-are-detected-chromium/test-finished-1.png]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Activity overview section › Activity cards show file access info (files section present)" classname="dashboard.spec.js" time="0.173">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/dashboard-Activity-overvie-0542e-info-files-section-present--chromium/test-finished-1.png]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Approve/Deny persistence › Approvals panel is visible on Overview tab" classname="dashboard.spec.js" time="0.145">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/dashboard-Approve-Deny-per-8f676--is-visible-on-Overview-tab-chromium/test-finished-1.png]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Approve/Deny persistence › Approvals render from API data" classname="dashboard.spec.js" time="0.136">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/dashboard-Approve-Deny-per-f1d65-rovals-render-from-API-data-chromium/test-finished-1.png]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Approve/Deny persistence › Clicking Approve on a pending item sends decision and updates UI" classname="dashboard.spec.js" time="0.224">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/dashboard-Approve-Deny-per-d975c-nds-decision-and-updates-UI-chromium/test-finished-1.png]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Approve/Deny persistence › Approval decision persists after navigating away and back" classname="dashboard.spec.js" time="0.253">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/dashboard-Approve-Deny-per-b9c57-er-navigating-away-and-back-chromium/test-finished-1.png]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Approve/Deny persistence › Approval count badge reflects pending count" classname="dashboard.spec.js" time="0.131">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/dashboard-Approve-Deny-per-f453f-adge-reflects-pending-count-chromium/test-finished-1.png]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Network tab › Network tab loads events from API" classname="dashboard.spec.js" time="0.217">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/dashboard-Network-tab-Network-tab-loads-events-from-API-chromium/test-finished-1.png]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Network tab › Network events show app_label (not blank) for known AI apps" classname="dashboard.spec.js" time="0.148">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/dashboard-Network-tab-Netw-2bd80-not-blank-for-known-AI-apps-chromium/test-finished-1.png]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Network tab › Network events with ai_service show service name (not blank)" classname="dashboard.spec.js" time="0.049">
+<properties>
+<property name="skip" value="">
+</property>
+</properties>
+<skipped>
+</skipped>
+</testcase>
+<testcase name="Network tab › Unknown network destinations get visual warning (row-unknown-net class)" classname="dashboard.spec.js" time="0.144">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/dashboard-Network-tab-Unkn-fbd37-ning-row-unknown-net-class--chromium/test-finished-1.png]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Network tab › KPI statNetwork count matches API response length" classname="dashboard.spec.js" time="0.15">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|artifacts/dashboard-Network-tab-KPI--dfc20-matches-API-response-length-chromium/test-finished-1.png]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+</testsuites>
