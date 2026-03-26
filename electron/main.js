@@ -18,10 +18,9 @@ const STARTUP_LOG_PATH = join(homedir(), '.argus', 'logs', 'electron-startup.log
 const SETTINGS_PATH = join(homedir(), '.argus', 'settings.json');
 const ONBOARDING_VERSION = 1;
 
-// Stability-first defaults for production: prevent macOS/Electron GPU compositor
-// issues that can manifest as blank/black windows on tab interactions.
-app.disableHardwareAcceleration();
-app.commandLine.appendSwitch('disable-gpu');
+// Use software rendering if GPU causes blank windows.
+// On macOS Sequoia+, full GPU disable can itself cause blank windows,
+// so we only disable compositing (the usual culprit for tab-switch blanks).
 app.commandLine.appendSwitch('disable-gpu-compositing');
 
 function normalizePrivacyMode(mode) {
@@ -137,8 +136,19 @@ app.whenReady().then(async () => {
       const { onRestartRequested } = await import('../src/web/server.js');
       onRestartRequested(() => {
         logStartup('Restart requested from dashboard');
-        app.relaunch();
-        app.exit(0);
+        // Stop backend first, then relaunch after a short delay so the
+        // OS has time to release the port and spawn the new process.
+        const doRelaunch = () => {
+          logStartup('Relaunching...');
+          app.relaunch();
+          // Use setTimeout so relaunch() registers before exit kills the process
+          setTimeout(() => app.exit(0), 200);
+        };
+        if (argusStop) {
+          Promise.resolve(argusStop()).then(doRelaunch).catch(doRelaunch);
+        } else {
+          doRelaunch();
+        }
       });
       logStartup('Restart callback registered');
     } catch (err) {
