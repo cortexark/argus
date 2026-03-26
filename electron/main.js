@@ -98,6 +98,33 @@ function logStartup(line) {
   }
 }
 
+/**
+ * Enable start-at-login by default for packaged desktop builds.
+ * Keeps the app hidden in the tray/menu bar on auto-launch.
+ */
+function ensureStartAtLoginEnabled() {
+  if (!(process.platform === 'darwin' || process.platform === 'win32')) return;
+  if (!app.isPackaged) {
+    logStartup('Skipping start-at-login auto-enable (development mode)');
+    return;
+  }
+
+  try {
+    const current = app.getLoginItemSettings();
+    if (!current.openAtLogin) {
+      app.setLoginItemSettings({
+        openAtLogin: true,
+        openAsHidden: true,
+      });
+      logStartup('Enabled start-at-login by default');
+    } else {
+      logStartup('Start-at-login already enabled');
+    }
+  } catch (err) {
+    logStartup(`Could not configure start-at-login: ${err?.message || err}`);
+  }
+}
+
 // Single instance lock — prevent multiple Argus windows
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -112,6 +139,7 @@ if (process.platform === 'darwin') {
 
 app.whenReady().then(async () => {
   logStartup('Electron app.whenReady triggered');
+  ensureStartAtLoginEnabled();
   const privacyMode = await ensureInstallMessaging();
   logStartup(`Privacy mode selected: ${privacyMode}`);
 
