@@ -16,12 +16,20 @@ import { scanProcesses } from './monitors/process-scanner.js';
 import { scanAIProcessFiles } from './monitors/file-monitor.js';
 import { scanAINetworkConnections } from './monitors/network-monitor.js';
 import { updatePortHistory } from './monitors/port-tracker.js';
-import { insertProcessSnapshot, insertFileAccess, insertSession, closeSession } from './db/store.js';
+import {
+  insertProcessSnapshot,
+  insertFileAccess,
+  insertSession,
+  closeSession,
+  reconcileOpenSessionsByPid,
+} from './db/store.js';
 import { PLATFORM_SENSITIVE_PATHS } from './lib/platform.js';
 import { startUnifiedLogMonitor } from './monitors/unified-log-monitor.js';
 import { COMMON_PORTS } from './ai-apps.js';
 import { detectCdpConnection, detectBrowserExtensionAiCalls } from './monitors/browser-monitor.js';
 import { updateBaselines } from './lib/baseline-engine.js';
+import { collectAllUsage, closeUsageTrackerDbs } from './monitors/usage-tracker.js';
+import { insertUsageSnapshot } from './db/store.js';
 
 function isCommonPort(port) {
   return COMMON_PORTS.has(Number(port));
@@ -66,9 +74,14 @@ const activeSessions = new Map();
  * @param {boolean} [opts.noNotify] - Disable notifications (for testing)
  * @param {boolean} [opts.noWatch] - Disable chokidar file watching (for testing)
  * @param {boolean} [opts.noWeb] - Disable web server (for testing or CLI-only mode)
+ * @param {'basic'|'deep'} [opts.privacyMode] - Monitoring depth override
  */
 export async function start(opts = {}) {
   const dbPath = opts.dbPath || config.DB_PATH;
+  const privacyMode = opts.privacyMode === 'basic' ? 'basic' : opts.privacyMode === 'deep'
+    ? 'deep'
+    : config.PRIVACY_MODE;
+  const deepMonitoring = privacyMode === 'deep';
 
   // Ensure data directory exists
   if (dbPath !== ':memory:') {
@@ -77,8 +90,28 @@ export async function start(opts = {}) {
 
   db = initializeDatabase(dbPath);
 
+  // Rehydrate open sessions from DB so app restarts do not create duplicate
+  // rows for still-running processes with the same pid.
+  try {
+    activeSessions.clear();
+    const { activeSessions: restored, closedCount } = reconcileOpenSessionsByPid(db);
+    for (const [pid, session] of restored) {
+      activeSessions.set(pid, session);
+    }
+    if (closedCount > 0) {
+      info(`Recovered ${restored.size} open session(s); closed ${closedCount} duplicate stale session row(s).`);
+    }
+  } catch (err) {
+    warn(`Session recovery failed: ${err.message}`);
+  }
+
   const appCount = Object.keys(AI_APPS).length;
   info(`Argus started. Monitoring ${appCount} AI app signatures...`);
+  info(
+    deepMonitoring
+      ? 'Monitoring mode: Deep (includes cross-app file access detection)'
+      : 'Monitoring mode: Basic (process + network, reduced permissions)',
+  );
 
   // Lazily import optional modules
   const notifyModule = opts.noNotify ? null : await importNotifier();
@@ -171,52 +204,57 @@ export async function start(opts = {}) {
     }
   }, config.SCAN_INTERVAL_MS);
 
-  // File monitor loop — fires specific alerts per sensitivity category
-  const fileInterval = setInterval(async () => {
-    if (controller.paused) return;
-    try {
-      const processes = await scanProcesses();
-      const { alertCount, alerts } = await scanAIProcessFiles(db, processes);
-      if (alertCount > 0) {
-        logAlert(`${alertCount} new file access alert(s) detected`);
+  // File monitor loop — only in deep mode (cross-app file access).
+  let fileInterval = null;
+  if (deepMonitoring) {
+    fileInterval = setInterval(async () => {
+      if (controller.paused) return;
+      try {
+        const processes = await scanProcesses();
+        const { alertCount, alerts } = await scanAIProcessFiles(db, processes);
+        if (alertCount > 0) {
+          logAlert(`${alertCount} new file access alert(s) detected`);
 
-        if (alerts) {
-          for (const alert of alerts) {
-            // Broadcast file alert to web dashboard clients
-            if (web) {
-              web.broadcast({ type: 'file_alert', data: alert });
+          if (alerts) {
+            for (const alert of alerts) {
+              // Broadcast file alert to web dashboard clients
+              if (web) {
+                web.broadcast({ type: 'file_alert', data: alert });
+              }
+            }
+          }
+
+          if (notifyModule && alerts) {
+            for (const alert of alerts) {
+              const appName = alert.appLabel || alert.processName;
+              const { filePath, sensitivity } = alert;
+
+              // Escalate specific high-risk types to named alerts
+              if (sensitivity === 'credentials') {
+                // SSH keys, AWS creds, keychains — highest severity
+                notifyModule.notify.credentialAccess(appName, filePath);
+              } else if (sensitivity === 'browserData') {
+                // Chrome/Firefox profile — passwords and cookies
+                const browser = filePath.includes('Chrome') ? 'Chrome'
+                  : filePath.includes('Firefox') ? 'Firefox'
+                  : filePath.includes('Brave') ? 'Brave'
+                  : filePath.includes('Safari') ? 'Safari'
+                  : null;
+                notifyModule.notify.browserDataAccess(appName, browser);
+              } else {
+                // Documents, Downloads, system files — batch these
+                notifyModule.notify.fileAlert(appName, filePath, sensitivity);
+              }
             }
           }
         }
-
-        if (notifyModule && alerts) {
-          for (const alert of alerts) {
-            const appName = alert.appLabel || alert.processName;
-            const { filePath, sensitivity } = alert;
-
-            // Escalate specific high-risk types to named alerts
-            if (sensitivity === 'credentials') {
-              // SSH keys, AWS creds, keychains — highest severity
-              notifyModule.notify.credentialAccess(appName, filePath);
-            } else if (sensitivity === 'browserData') {
-              // Chrome/Firefox profile — passwords and cookies
-              const browser = filePath.includes('Chrome') ? 'Chrome'
-                : filePath.includes('Firefox') ? 'Firefox'
-                : filePath.includes('Brave') ? 'Brave'
-                : filePath.includes('Safari') ? 'Safari'
-                : null;
-              notifyModule.notify.browserDataAccess(appName, browser);
-            } else {
-              // Documents, Downloads, system files — batch these
-              notifyModule.notify.fileAlert(appName, filePath, sensitivity);
-            }
-          }
-        }
+      } catch (err) {
+        warn(`File monitor error: ${err.code || 'unknown'}`);
       }
-    } catch (err) {
-      warn(`File monitor error: ${err.code || 'unknown'}`);
-    }
-  }, config.FILE_MONITOR_INTERVAL_MS);
+    }, config.FILE_MONITOR_INTERVAL_MS);
+  } else {
+    info('Basic mode active: cross-app file monitor is disabled.');
+  }
 
   // Network monitor loop — surfaces destination, port, and unknown host warnings
   const networkInterval = setInterval(async () => {
@@ -285,6 +323,38 @@ export async function start(opts = {}) {
     }
   }, 60 * 60 * 1000);
 
+  // AI tool usage tracker — reads Codex, Claude, Cursor local data every 60s
+  const usageInterval = setInterval(() => {
+    if (controller.paused) return;
+    try {
+      const usage = collectAllUsage();
+      const now = new Date().toISOString();
+
+      // Store a snapshot per tool for history tracking
+      for (const tool of usage.tools) {
+        try {
+          insertUsageSnapshot(db, {
+            app: tool.app,
+            provider: tool.provider,
+            model: (tool.byModel || []).map(m => m.model).join(', ') || null,
+            tokens: tool.totalTokens || 0,
+            estimatedCostUsd: tool.estimatedCostUsd || 0,
+            sessionCount: tool.totalSessions || 0,
+            snapshotData: JSON.stringify(tool.byModel || []),
+            timestamp: now,
+          });
+        } catch { /* ignore individual insert failures */ }
+      }
+
+      // Broadcast usage update to dashboard
+      if (web) {
+        web.broadcast({ type: 'usage', data: usage });
+      }
+    } catch (err) {
+      warn(`Usage tracker error: ${err.message}`);
+    }
+  }, 60_000);
+
   // Hourly baseline update
   const baselineInterval = setInterval(async () => {
     try {
@@ -294,7 +364,8 @@ export async function start(opts = {}) {
     }
   }, 60 * 60 * 1000);
 
-  intervals = [processInterval, fileInterval, networkInterval, cleanupInterval, baselineInterval];
+  intervals = [processInterval, networkInterval, cleanupInterval, baselineInterval, usageInterval];
+  if (fileInterval) intervals.push(fileInterval);
 
   // Start digest scheduler (fires at 8:00 AM daily)
   try {
@@ -304,14 +375,14 @@ export async function start(opts = {}) {
     warn(`Digest scheduler failed to start: ${err.message}`);
   }
 
-  // Chokidar file watching for credential paths (all platforms)
-  if (!opts.noWatch) {
+  // Chokidar file watching for credential paths (deep mode only)
+  if (deepMonitoring && !opts.noWatch) {
     fsWatcher = await startChokidarWatcher(db, notifyModule);
   }
 
   // macOS Unified Log monitor — real-time, event-driven (superior to lsof polling)
   // Catches transient file opens, MCP subprocess spawning, TCC permission checks
-  if (!opts.noWatch) {
+  if (deepMonitoring && !opts.noWatch) {
     unifiedLogMonitor = startUnifiedLogMonitor(db, {
       onEvent: (entry, classified) => {
         if (!notifyModule) return;
@@ -476,6 +547,9 @@ export async function stop() {
     }
     fsWatcher = null;
   }
+
+  // Close usage tracker read-only database connections
+  closeUsageTrackerDbs();
 
   if (db) {
     try {

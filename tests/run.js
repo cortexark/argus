@@ -32,7 +32,9 @@ const testFiles = [
   './monitors/cloud-sync-detector.test.js',
   './lib/user-config.test.js',
   './cli/ci-check.test.js',
+  './monitors/usage-tracker.test.js',
   './build/build-config.test.js',
+  './build/release-workflow.test.js',
   './build/build-output.test.js',
 ];
 

@@ -8,11 +8,13 @@
  */
 
 import { createServer } from 'node:http';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { createBroadcaster } from './ws-broadcaster.js';
+import { config } from '../lib/config.js';
 import { generateReport } from '../report/report-generator.js';
 import {
   getRecentAlerts,
@@ -21,7 +23,9 @@ import {
   setApprovalDecision,
   getApprovalDecisions,
   getRecentSessions,
+  getRecentUsageSnapshots,
 } from '../db/store.js';
+import { collectAllUsage } from '../monitors/usage-tracker.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -29,6 +33,97 @@ export const WEB_PORT = Number(process.env.ARGUS_WEB_PORT) || 3131;
 
 // Magic GUID required by the WebSocket spec
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+
+function normalizePrivacyMode(mode) {
+  return mode === 'deep' ? 'deep' : 'basic';
+}
+
+function getSettingsPath() {
+  return process.env.ARGUS_SETTINGS_PATH || join(homedir(), '.argus', 'settings.json');
+}
+
+function readSettings() {
+  try {
+    const settingsPath = getSettingsPath();
+    if (!existsSync(settingsPath)) return {};
+    const raw = readFileSync(settingsPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return {};
+    return parsed;
+  } catch {
+    return {};
+  }
+}
+
+function getConfiguredPrivacyMode() {
+  const settings = readSettings();
+  if (!settings.privacyMode) return config.PRIVACY_MODE;
+  return normalizePrivacyMode(settings.privacyMode);
+}
+
+function savePrivacyMode(mode) {
+  const nextMode = normalizePrivacyMode(mode);
+  const settingsPath = getSettingsPath();
+  const settings = readSettings();
+  settings.onboardingVersion = Number(settings.onboardingVersion) || 1;
+  settings.privacyMode = nextMode;
+  settings.updatedAt = new Date().toISOString();
+  mkdirSync(dirname(settingsPath), { recursive: true });
+  writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+  return nextMode;
+}
+
+async function uninstallService() {
+  if (process.env.ARGUS_SKIP_DAEMON_UNINSTALL === '1') {
+    return { success: true, message: 'Service uninstall skipped (test mode).' };
+  }
+  try {
+    const daemonManager = await import('../daemon/daemon-manager.js');
+    if (daemonManager?.uninstall) {
+      return await daemonManager.uninstall();
+    }
+  } catch (err) {
+    return { success: false, message: err?.message || 'Service uninstall failed.' };
+  }
+  return { success: false, message: 'Service manager unavailable.' };
+}
+
+function uninstallLocalData(confirm) {
+  if (!confirm) {
+    return { success: false, message: 'Confirmation required.' };
+  }
+  if (process.env.ARGUS_SKIP_DATA_DELETE === '1') {
+    return { success: true, message: 'Data deletion skipped (test mode).' };
+  }
+  try {
+    rmSync(config.DATA_DIR, { recursive: true, force: true });
+    return { success: true, message: `Removed local data at ${config.DATA_DIR}` };
+  } catch (err) {
+    return { success: false, message: err?.message || 'Could not remove local data.' };
+  }
+}
+
+async function triggerAppRestart() {
+  // Test guard: allow endpoint behavior to be validated without terminating test process.
+  if (process.env.ARGUS_SKIP_RESTART === '1') return;
+
+  if (process.versions?.electron) {
+    try {
+      const electronMod = await import('electron');
+      const electronApp = electronMod?.app || electronMod?.default?.app;
+      if (electronApp) {
+        electronApp.relaunch();
+        electronApp.exit(0);
+        return;
+      }
+    } catch {
+      // Fallback to process exit below.
+    }
+  }
+
+  // In daemon/service mode, supervisor can relaunch after exit.
+  process.exit(0);
+}
 
 /**
  * Check whether an origin header value is a localhost origin.
@@ -78,6 +173,8 @@ function sendJson(res, status, body, allowOrigin = null) {
   const headers = {
     'Content-Type': 'application/json',
     'Content-Length': Buffer.byteLength(payload),
+    'Cache-Control': 'no-store',
+    Pragma: 'no-cache',
   };
   if (allowOrigin) {
     headers['Access-Control-Allow-Origin'] = allowOrigin;
@@ -241,6 +338,7 @@ export function startWebServer(db, port, controller = null) {
       let processCount = 0;
       let alertCount = 0;
       let hasCritical = false;
+      const configuredPrivacyMode = getConfiguredPrivacyMode();
       try { processCount = getActiveProcesses(db, sinceISO).length; } catch { /* ignore */ }
       try {
         const alerts = getRecentAlerts(db, sinceISO);
@@ -254,6 +352,9 @@ export function startWebServer(db, port, controller = null) {
         running: true,
         paused: controller ? controller.paused : false,
         uptime: Math.floor(process.uptime()),
+        privacyMode: config.PRIVACY_MODE,
+        configuredPrivacyMode,
+        restartRequired: configuredPrivacyMode !== config.PRIVACY_MODE,
         processCount,
         alertCount,
         hasCritical,
@@ -264,6 +365,94 @@ export function startWebServer(db, port, controller = null) {
     if (path === '/api/monitoring/toggle' && method === 'POST') {
       if (controller) controller.paused = !controller.paused;
       sendJson(res, 200, { paused: controller ? controller.paused : false }, allowOrigin);
+      return;
+    }
+
+    if (path === '/api/privacy-mode' && method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', () => {
+        try {
+          const parsed = JSON.parse(body || '{}');
+          const mode = parsed?.mode;
+          if (!['basic', 'deep'].includes(mode)) {
+            res.writeHead(400, { 'Content-Type': 'text/plain' });
+            res.end('Bad Request');
+            return;
+          }
+          const configuredPrivacyMode = savePrivacyMode(mode);
+          sendJson(res, 200, {
+            ok: true,
+            configuredPrivacyMode,
+            activePrivacyMode: config.PRIVACY_MODE,
+            restartRequired: configuredPrivacyMode !== config.PRIVACY_MODE,
+          }, allowOrigin);
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'text/plain' });
+          res.end('Bad Request');
+        }
+      });
+      return;
+    }
+
+    if (path === '/api/app/uninstall-info' && method === 'GET') {
+      sendJson(res, 200, {
+        appPath: process.execPath,
+        dataDir: config.DATA_DIR,
+        serviceCommand: 'argus uninstall',
+        appRemovalHint: 'Quit Argus, then move Argus.app to Trash.',
+      }, allowOrigin);
+      return;
+    }
+
+    if (path === '/api/app/uninstall-service' && method === 'POST') {
+      uninstallService().then((result) => {
+        sendJson(res, 200, {
+          ok: Boolean(result?.success),
+          message: result?.message || (result?.success ? 'Service uninstalled.' : 'Service uninstall failed.'),
+        }, allowOrigin);
+      }).catch((err) => {
+        sendJson(res, 500, {
+          ok: false,
+          message: err?.message || 'Service uninstall failed.',
+        }, allowOrigin);
+      });
+      return;
+    }
+
+    if (path === '/api/app/uninstall-data' && method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', () => {
+        try {
+          const parsed = JSON.parse(body || '{}');
+          const result = uninstallLocalData(parsed?.confirm === true);
+          if (!result.success && result.message === 'Confirmation required.') {
+            res.writeHead(400, { 'Content-Type': 'text/plain' });
+            res.end('Bad Request');
+            return;
+          }
+          sendJson(res, 200, {
+            ok: Boolean(result.success),
+            message: result.message,
+          }, allowOrigin);
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'text/plain' });
+          res.end('Bad Request');
+        }
+      });
+      return;
+    }
+
+    if (path === '/api/app/restart' && method === 'POST') {
+      sendJson(res, 200, { ok: true, restarting: true }, allowOrigin);
+      // Delay restart very slightly to ensure response flushes to client.
+      setTimeout(() => {
+        triggerAppRestart().catch(() => {
+          // Worst-case fallback if restart flow errors.
+          process.exit(0);
+        });
+      }, 120);
       return;
     }
 
@@ -347,6 +536,19 @@ export function startWebServer(db, port, controller = null) {
       let sessions = [];
       try { sessions = getRecentSessions(db); } catch { /* ignore */ }
       sendJson(res, 200, sessions, allowOrigin);
+      return;
+    }
+
+    // AI tool usage: token counts, costs, model breakdown (TermTracker-inspired)
+    if (path === '/api/usage' && method === 'GET') {
+      try {
+        const live = collectAllUsage();
+        let snapshots = [];
+        try { snapshots = getRecentUsageSnapshots(db); } catch { /* ignore */ }
+        sendJson(res, 200, { ...live, history: snapshots }, allowOrigin);
+      } catch (err) {
+        sendJson(res, 200, { tools: [], summary: {}, history: [], error: err.message }, allowOrigin);
+      }
       return;
     }
 

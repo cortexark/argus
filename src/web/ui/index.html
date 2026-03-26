@@ -83,7 +83,6 @@
       position: sticky;
       top: 0;
       z-index: 200;
-      backdrop-filter: blur(8px);
     }
 
     .header-left { display: flex; align-items: center; gap: 20px; }
@@ -145,6 +144,34 @@
       color: var(--text2);
       font-family: var(--font-mono);
       letter-spacing: 0.2px;
+    }
+
+    .mode-chip {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: var(--r-full);
+      border: 1px solid var(--border2);
+      color: var(--text2);
+      background: var(--bg4);
+      white-space: nowrap;
+    }
+    .mode-chip.mode-basic {
+      color: var(--blue);
+      border-color: rgba(88,166,255,0.35);
+      background: rgba(88,166,255,0.08);
+    }
+    .mode-chip.mode-deep {
+      color: var(--sev-high);
+      border-color: var(--sev-high-bd);
+      background: var(--sev-high-bg);
+    }
+    .mode-chip.mode-pending {
+      color: var(--sev-high);
+      border-color: var(--sev-high-bd);
+      background: var(--sev-high-bg);
     }
 
     .header-right { display: flex; align-items: center; gap: 10px; }
@@ -481,7 +508,6 @@
       display: none; position: fixed; inset: 0;
       background: rgba(0,0,0,0.75); z-index: 500;
       align-items: center; justify-content: center;
-      backdrop-filter: blur(4px);
     }
     .modal-overlay.open { display: flex; }
     .modal {
@@ -500,6 +526,79 @@
     .modal-body { padding: 20px; overflow: auto; flex: 1; }
     .report-pre { font-family: var(--font-mono); font-size: 11px; white-space: pre-wrap; word-break: break-all; color: var(--text); line-height: 1.7; }
 
+    /* ── Usage Cards ──────────────────────────────────────────────── */
+    .usage-tool-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .usage-tool-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 18px 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    .usage-tool-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--tool-color, var(--accent)), transparent);
+    }
+    .usage-tool-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .usage-tool-name {
+      font-size: 14px; font-weight: 700; color: var(--text);
+    }
+    .usage-tool-provider {
+      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.7px; color: var(--text3);
+      padding: 2px 8px; background: var(--bg4);
+      border-radius: var(--r-full);
+    }
+    .usage-tool-stats {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+      margin-bottom: 14px;
+    }
+    .usage-stat-value {
+      font-size: 20px; font-weight: 800; color: var(--text);
+      font-variant-numeric: tabular-nums; line-height: 1;
+    }
+    .usage-stat-label {
+      font-size: 10px; color: var(--text3); text-transform: uppercase;
+      letter-spacing: 0.5px; margin-top: 4px;
+    }
+    .usage-model-bar {
+      height: 6px; border-radius: var(--r-full);
+      background: var(--bg4); overflow: hidden;
+      display: flex; margin-bottom: 8px;
+    }
+    .usage-model-segment {
+      height: 100%; transition: width 0.3s;
+    }
+    .usage-model-legend {
+      display: flex; flex-wrap: wrap; gap: 8px;
+    }
+    .usage-model-item {
+      display: flex; align-items: center; gap: 4px;
+      font-size: 11px; color: var(--text2);
+    }
+    .usage-model-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      display: inline-block;
+    }
+    .section-heading {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.8px;
+      text-transform: uppercase; color: var(--text3);
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+
     /* ── Responsive ─────────────────────────────────────────────── */
     @media (max-width: 640px) {
       main { padding: 12px 12px 32px; }
@@ -508,6 +607,7 @@
       .tab { padding: 10px 12px; font-size: 11px; }
       .logo-sub { display: none; }
       .uptime-chip { display: none; }
+      .mode-chip { display: none; }
     }
   </style>
 </head>
@@ -522,8 +622,12 @@
       <span class="live-label" id="liveLabel">CONNECTING</span>
     </div>
     <span class="uptime-chip" id="uptimeChip"></span>
+    <span class="mode-chip mode-basic" id="privacyModeChip">Basic Mode</span>
   </div>
   <div class="header-right">
+    <button class="btn" id="modeToggleBtn" data-next-mode="deep">Switch to Deep</button>
+    <button class="btn" id="restartBtn">Restart Argus</button>
+    <button class="btn" id="uninstallBtn">Uninstall</button>
     <button class="btn" id="reportBtn"><span class="btn-icon">&#9783;</span> Report</button>
   </div>
 </header>
@@ -553,6 +657,10 @@
   <div class="tab" data-tab="sessions">
     <span class="tab-icon">&#128336;</span> Sessions
     <span class="tab-badge" id="badge-sessions"></span>
+  </div>
+  <div class="tab" data-tab="usage">
+    <span class="tab-icon">&#128200;</span> Usage
+    <span class="tab-badge" id="badge-usage"></span>
   </div>
 </nav>
 
@@ -707,6 +815,55 @@
     </div>
   </section>
 
+  <!-- ── USAGE (TermTracker-inspired) ────────────────────────────── -->
+  <section class="section" id="tab-usage">
+
+    <!-- Usage summary cards -->
+    <div class="kpi-row" id="usageKpis">
+      <div class="kpi-card" style="--card-accent: var(--accent)">
+        <div class="kpi-label">Total Tokens</div>
+        <div class="kpi-value" id="usageTotalTokens">--</div>
+        <div class="kpi-sub">across all AI tools</div>
+      </div>
+      <div class="kpi-card" style="--card-accent: var(--sev-high)">
+        <div class="kpi-label">API Cost Equivalent</div>
+        <div class="kpi-value" id="usageTotalCost">--</div>
+        <div class="kpi-sub">at standard API rates</div>
+      </div>
+      <div class="kpi-card" style="--card-accent: var(--blue)">
+        <div class="kpi-label">Total Sessions</div>
+        <div class="kpi-value" id="usageTotalSessions">--</div>
+        <div class="kpi-sub">across all tools</div>
+      </div>
+      <div class="kpi-card" style="--card-accent: var(--sev-ok)">
+        <div class="kpi-label">Tools Detected</div>
+        <div class="kpi-value" id="usageToolCount">--</div>
+        <div class="kpi-sub">with local data</div>
+      </div>
+    </div>
+
+    <!-- Per-tool breakdown -->
+    <div id="usageToolCards" class="usage-tool-cards"></div>
+
+    <!-- Recent sessions table -->
+    <div class="section-heading" style="margin-top: 20px;">Recent Sessions by Token Usage</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Tool</th>
+            <th>Session / Title</th>
+            <th>Model</th>
+            <th>Tokens</th>
+            <th>Est. Cost</th>
+            <th>Updated</th>
+          </tr>
+        </thead>
+        <tbody id="usageSessionTable"><tr class="empty-row"><td colspan="6">Loading usage data...</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
 </main>
 
 <!-- ── Report Modal ───────────────────────────────────────────── -->
@@ -718,6 +875,26 @@
     </div>
     <div class="modal-body">
       <pre class="report-pre" id="reportContent">Loading report...</pre>
+    </div>
+  </div>
+</div>
+
+<!-- ── Uninstall Modal ────────────────────────────────────────── -->
+<div class="modal-overlay" id="uninstallModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">&#9888; Uninstall Argus</span>
+      <button class="modal-close" id="uninstallClose">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <p style="margin-bottom: 12px; color: var(--text2);">
+        Choose what to remove. For complete app removal, quit Argus and move Argus.app to Trash.
+      </p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+        <button class="btn" id="uninstallServiceBtn">Uninstall Service</button>
+        <button class="btn" id="uninstallDataBtn">Delete Local Data</button>
+      </div>
+      <pre class="report-pre" id="uninstallStatus">Loading uninstall options...</pre>
     </div>
   </div>
 </div>
@@ -768,7 +945,19 @@ function emptyRow(cols, msg) {
   return tr;
 }
 function fetchJSON(url) {
-  return fetch(url).then(function(r) {
+  return fetch(url, { cache: 'no-store' }).then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  });
+}
+
+function postJSON(url, payload) {
+  return fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    cache: 'no-store',
+    body: JSON.stringify(payload || {}),
+  }).then(function(r) {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     return r.json();
   });
@@ -785,11 +974,18 @@ function sevBadge(sens) {
 
 /* ── Tab switching ───────────────────────────────────────────── */
 function switchTab(name) {
+  // Defensive fallback: never allow a state where no section is visible.
+  if (typeof name !== 'string' || !name) name = 'overview';
+  var target = document.getElementById('tab-' + name);
+  if (!target) {
+    name = 'overview';
+    target = document.getElementById('tab-overview');
+  }
+
   document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
   document.querySelectorAll('.section').forEach(function(s) { s.classList.remove('active'); });
   var tabEl = document.querySelector('.tab[data-tab="' + name + '"]');
   if (tabEl) tabEl.classList.add('active');
-  var target = document.getElementById('tab-' + name);
   if (target) target.classList.add('active');
 }
 // Expose to global scope so inline onclick attributes on KPI cards can call it
@@ -841,6 +1037,9 @@ function refreshStatus() {
     var text  = document.getElementById('statusText');
     var up    = document.getElementById('statusUptime');
     var chip  = document.getElementById('uptimeChip');
+    var modeChip = document.getElementById('privacyModeChip');
+    var modeToggleBtn = document.getElementById('modeToggleBtn');
+    var restartBtn = document.getElementById('restartBtn');
     if (data.running) {
       dot.className = 'status-dot running'; text.className = 'status-label running'; text.textContent = 'MONITORING';
     } else {
@@ -849,6 +1048,39 @@ function refreshStatus() {
     var upStr = fmtUptime(data.uptime);
     up.textContent = upStr ? '— ' + upStr : '';
     chip.textContent = upStr ? 'up ' + upStr : '';
+
+    var activeMode = data.privacyMode === 'deep' ? 'deep' : 'basic';
+    var configuredMode = data.configuredPrivacyMode === 'deep' ? 'deep' : activeMode;
+    var restartRequired = data.restartRequired === true;
+
+    if (modeChip) {
+      if (restartRequired) {
+        modeChip.textContent = 'Restart → ' + (configuredMode === 'deep' ? 'Deep Monitoring' : 'Basic Mode');
+        modeChip.className = 'mode-chip mode-pending';
+        modeChip.title = 'Mode preference saved. Restart Argus to apply.';
+      } else {
+        modeChip.textContent = activeMode === 'deep' ? 'Deep Monitoring' : 'Basic Mode';
+        modeChip.className = 'mode-chip ' + (activeMode === 'deep' ? 'mode-deep' : 'mode-basic');
+        modeChip.title = activeMode === 'deep'
+          ? 'Deep Monitoring: may require macOS access-to-other-app-data permission'
+          : 'Basic Mode: reduced permissions (no cross-app file access scanning)';
+      }
+    }
+
+    if (modeToggleBtn) {
+      var nextMode = configuredMode === 'deep' ? 'basic' : 'deep';
+      modeToggleBtn.dataset.nextMode = nextMode;
+      modeToggleBtn.textContent = nextMode === 'deep' ? 'Switch to Deep' : 'Switch to Basic';
+      modeToggleBtn.title = 'Change monitoring mode (restart required to apply).';
+    }
+
+    if (restartBtn) {
+      restartBtn.textContent = restartRequired ? 'Restart to Apply' : 'Restart Argus';
+      restartBtn.title = restartRequired
+        ? 'Restart Argus to apply your selected monitoring mode.'
+        : 'Restart Argus now.';
+    }
+
     setKPI('statProcesses', data.processCount);
     setKPI('statAlerts',    data.alertCount);
   }).catch(function() {});
@@ -1049,8 +1281,132 @@ function decide(id, decision) {
   fetch('/api/approvals/decide', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    cache: 'no-store',
     body: JSON.stringify({ id: id, decision: decision }),
-  }).then(function() { refreshApprovals(); }).catch(function() {});
+  }).then(function(res) {
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return refreshApprovals();
+  }).catch(function(err) {
+    addFeedEvent('process', 'Could not save approval decision: ' + err.message);
+  });
+}
+
+var modeToggleBtn = document.getElementById('modeToggleBtn');
+var modeToggleBusy = false;
+var restartBtn = document.getElementById('restartBtn');
+var restartBusy = false;
+var uninstallBtn = document.getElementById('uninstallBtn');
+var uninstallModal = document.getElementById('uninstallModal');
+var uninstallClose = document.getElementById('uninstallClose');
+var uninstallServiceBtn = document.getElementById('uninstallServiceBtn');
+var uninstallDataBtn = document.getElementById('uninstallDataBtn');
+var uninstallStatus = document.getElementById('uninstallStatus');
+
+function setPrivacyMode(mode) {
+  return postJSON('/api/privacy-mode', { mode: mode });
+}
+
+if (modeToggleBtn) {
+  modeToggleBtn.addEventListener('click', function() {
+    if (modeToggleBusy) return;
+    var nextMode = modeToggleBtn.dataset.nextMode === 'deep' ? 'deep' : 'basic';
+    modeToggleBusy = true;
+    modeToggleBtn.disabled = true;
+    modeToggleBtn.textContent = 'Saving...';
+
+    setPrivacyMode(nextMode).then(function(result) {
+      var modeLabel = nextMode === 'deep' ? 'Deep Monitoring' : 'Basic Mode';
+      if (result.restartRequired) {
+        addFeedEvent('process', modeLabel + ' selected. Restart Argus to apply.');
+      } else {
+        addFeedEvent('process', 'Monitoring mode switched to ' + modeLabel + '.');
+      }
+    }).catch(function(err) {
+      addFeedEvent('process', 'Could not change monitoring mode: ' + err.message);
+    }).finally(function() {
+      modeToggleBusy = false;
+      modeToggleBtn.disabled = false;
+      refreshStatus();
+    });
+  });
+}
+
+if (restartBtn) {
+  restartBtn.addEventListener('click', function() {
+    if (restartBusy) return;
+    restartBusy = true;
+    restartBtn.disabled = true;
+    restartBtn.textContent = 'Restarting...';
+    postJSON('/api/app/restart', {}).then(function() {
+      addFeedEvent('process', 'Argus is restarting...');
+    }).catch(function(err) {
+      restartBusy = false;
+      restartBtn.disabled = false;
+      addFeedEvent('process', 'Could not restart Argus: ' + err.message);
+      refreshStatus();
+    });
+  });
+}
+
+function renderUninstallInfo() {
+  return fetchJSON('/api/app/uninstall-info').then(function(info) {
+    uninstallStatus.textContent =
+      'App path: ' + (info.appPath || '--') + '\n' +
+      'Data path: ' + (info.dataDir || '--') + '\n' +
+      'Service command: ' + (info.serviceCommand || 'argus uninstall') + '\n\n' +
+      (info.appRemovalHint || 'Quit Argus, then move Argus.app to Trash.');
+  }).catch(function(err) {
+    uninstallStatus.textContent = 'Could not load uninstall info: ' + err.message;
+  });
+}
+
+if (uninstallBtn) {
+  uninstallBtn.addEventListener('click', function() {
+    uninstallModal.classList.add('open');
+    renderUninstallInfo();
+  });
+}
+
+if (uninstallClose) {
+  uninstallClose.addEventListener('click', function() { uninstallModal.classList.remove('open'); });
+}
+
+if (uninstallModal) {
+  uninstallModal.addEventListener('click', function(e) {
+    if (e.target === uninstallModal) uninstallModal.classList.remove('open');
+  });
+}
+
+if (uninstallServiceBtn) {
+  uninstallServiceBtn.addEventListener('click', function() {
+    uninstallServiceBtn.disabled = true;
+    postJSON('/api/app/uninstall-service', {}).then(function(res) {
+      uninstallStatus.textContent = (res.ok ? 'Service uninstall complete.\n' : 'Service uninstall failed.\n') + (res.message || '');
+      addFeedEvent('process', res.ok ? 'Argus service uninstalled.' : ('Service uninstall failed: ' + (res.message || '')));
+    }).catch(function(err) {
+      uninstallStatus.textContent = 'Service uninstall failed: ' + err.message;
+      addFeedEvent('process', 'Service uninstall failed: ' + err.message);
+    }).finally(function() {
+      uninstallServiceBtn.disabled = false;
+    });
+  });
+}
+
+if (uninstallDataBtn) {
+  uninstallDataBtn.addEventListener('click', function() {
+    var confirmed = window.confirm('Delete all local Argus data (~/.argus)? This cannot be undone.');
+    if (!confirmed) return;
+    uninstallDataBtn.disabled = true;
+    postJSON('/api/app/uninstall-data', { confirm: true }).then(function(res) {
+      uninstallStatus.textContent = (res.ok ? 'Local data removed.\n' : 'Local data removal failed.\n') + (res.message || '');
+      addFeedEvent('process', res.ok ? 'Local Argus data removed.' : ('Data removal failed: ' + (res.message || '')));
+    }).catch(function(err) {
+      uninstallStatus.textContent = 'Local data removal failed: ' + err.message;
+      addFeedEvent('process', 'Data removal failed: ' + err.message);
+    }).finally(function() {
+      uninstallDataBtn.disabled = false;
+    });
+  });
 }
 
 /* ── Activity Cards ──────────────────────────────────────────── */
@@ -1111,12 +1467,26 @@ function fmtDuration(seconds) {
   return Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm';
 }
 
+function getSessionStartedAt(session) {
+  return session.started_at || session.startedAt || null;
+}
+
+function getSessionEndedAt(session) {
+  return session.ended_at || session.endedAt || null;
+}
+
+function getSessionDurationSeconds(session) {
+  if (session.duration_seconds != null) return session.duration_seconds;
+  if (session.durationSeconds != null) return session.durationSeconds;
+  return null;
+}
+
 function refreshSessions() {
   return fetchJSON('/api/sessions').then(function(sessions) {
     var tbody = document.getElementById('sessionTable');
     var badgeEl = document.getElementById('badge-sessions');
     tbody.textContent = '';
-    var running = sessions.filter(function(s) { return !s.ended_at; }).length;
+    var running = sessions.filter(function(s) { return !getSessionEndedAt(s); }).length;
     if (badgeEl) badgeEl.textContent = running > 0 ? running : '';
     if (!sessions.length) {
       var row = document.createElement('tr'); row.className = 'empty-row';
@@ -1126,22 +1496,188 @@ function refreshSessions() {
     }
     sessions.forEach(function(s) {
       var tr = document.createElement('tr');
-      if (!s.ended_at) tr.style.fontWeight = '600';
+      var startedAt = getSessionStartedAt(s);
+      var endedAt = getSessionEndedAt(s);
+      var durationSeconds = getSessionDurationSeconds(s);
+      if (!endedAt) tr.style.fontWeight = '600';
 
       var appTd = document.createElement('td'); appTd.textContent = s.app_label;
-      var startTd = document.createElement('td'); startTd.className = 'mono'; startTd.textContent = fmtDateTime(s.started_at);
+      var startTd = document.createElement('td'); startTd.className = 'mono'; startTd.textContent = fmtDateTime(startedAt);
       var endTd = document.createElement('td'); endTd.className = 'mono';
-      endTd.textContent = s.ended_at ? fmtDateTime(s.ended_at) : '\u2014';
+      endTd.textContent = endedAt ? fmtDateTime(endedAt) : '\u2014';
       var durTd = document.createElement('td'); durTd.className = 'mono';
-      durTd.textContent = fmtDuration(s.duration_seconds);
+      durTd.textContent = fmtDuration(durationSeconds);
       var statusTd = document.createElement('td');
       var badge = document.createElement('span');
-      badge.className = s.ended_at ? 'sev sev-ok' : 'sev sev-running';
-      badge.textContent = s.ended_at ? 'Ended' : 'Running';
+      badge.className = endedAt ? 'sev sev-ok' : 'sev sev-running';
+      badge.textContent = endedAt ? 'Ended' : 'Running';
       statusTd.appendChild(badge);
 
       tr.appendChild(appTd); tr.appendChild(startTd); tr.appendChild(endTd);
       tr.appendChild(durTd); tr.appendChild(statusTd);
+      tbody.appendChild(tr);
+    });
+  }).catch(function() {});
+}
+
+/* ── Usage (TermTracker-inspired) ────────────────────────────── */
+var MODEL_COLORS = ['#00d4a0','#58a6ff','#ff8c00','#e5c241','#ff4444','#a371f7','#3fb950'];
+
+function fmtTokens(n) {
+  if (n == null || n === 0) return '0';
+  if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return String(n);
+}
+function fmtCost(n) {
+  if (n == null || n === 0) return '$0.00';
+  if (n >= 1000) return '$' + (n / 1000).toFixed(1) + 'K';
+  return '$' + n.toFixed(2);
+}
+
+function buildUsageToolCard(tool) {
+  var card = document.createElement('div');
+  card.className = 'usage-tool-card';
+  var toolColors = { openai: '#00a67e', anthropic: '#d4a574', cursor: '#58a6ff' };
+  card.style.setProperty('--tool-color', toolColors[tool.provider] || '#00d4a0');
+
+  var models = tool.byModel || [];
+  var totalTokens = tool.totalTokens || 0;
+
+  // Header
+  var header = document.createElement('div');
+  header.className = 'usage-tool-header';
+  var nameEl = document.createElement('span');
+  nameEl.className = 'usage-tool-name';
+  nameEl.textContent = tool.app;
+  var provEl = document.createElement('span');
+  provEl.className = 'usage-tool-provider';
+  provEl.textContent = tool.provider;
+  header.appendChild(nameEl);
+  header.appendChild(provEl);
+  card.appendChild(header);
+
+  // Stats row
+  var stats = document.createElement('div');
+  stats.className = 'usage-tool-stats';
+  var statItems = [
+    { value: fmtTokens(totalTokens), label: 'Tokens' },
+    { value: fmtCost(tool.estimatedCostUsd), label: 'Est. Cost' },
+    { value: String(tool.totalSessions || 0), label: 'Sessions' },
+  ];
+  statItems.forEach(function(s) {
+    var div = document.createElement('div');
+    var val = document.createElement('div');
+    val.className = 'usage-stat-value';
+    val.textContent = s.value;
+    var lbl = document.createElement('div');
+    lbl.className = 'usage-stat-label';
+    lbl.textContent = s.label;
+    div.appendChild(val);
+    div.appendChild(lbl);
+    stats.appendChild(div);
+  });
+  card.appendChild(stats);
+
+  // Model bar + legend
+  if (models.length > 0) {
+    var bar = document.createElement('div');
+    bar.className = 'usage-model-bar';
+    var legend = document.createElement('div');
+    legend.className = 'usage-model-legend';
+
+    models.forEach(function(m, i) {
+      var pct = totalTokens > 0 ? (m.tokens / totalTokens * 100) : 0;
+      var color = MODEL_COLORS[i % MODEL_COLORS.length];
+
+      var seg = document.createElement('div');
+      seg.className = 'usage-model-segment';
+      seg.style.width = pct.toFixed(1) + '%';
+      seg.style.background = color;
+      bar.appendChild(seg);
+
+      var item = document.createElement('span');
+      item.className = 'usage-model-item';
+      var dot = document.createElement('span');
+      dot.className = 'usage-model-dot';
+      dot.style.background = color;
+      item.appendChild(dot);
+      item.appendChild(document.createTextNode(' ' + (m.model || 'unknown') + ' (' + fmtTokens(m.tokens || m.inputTokens || 0) + ')'));
+      legend.appendChild(item);
+    });
+
+    card.appendChild(bar);
+    card.appendChild(legend);
+  }
+
+  return card;
+}
+
+function refreshUsage() {
+  return fetchJSON('/api/usage').then(function(data) {
+    var summary = data.summary || {};
+    var tools = data.tools || [];
+
+    // Update KPI cards
+    document.getElementById('usageTotalTokens').textContent = fmtTokens(summary.totalTokens);
+    document.getElementById('usageTotalCost').textContent = fmtCost(summary.estimatedCostUsd);
+    document.getElementById('usageTotalSessions').textContent = summary.totalSessions || 0;
+    document.getElementById('usageToolCount').textContent = summary.toolCount || 0;
+
+    // Badge
+    setBadge('badge-usage', summary.toolCount || 0);
+
+    // Tool cards
+    var cardsEl = document.getElementById('usageToolCards');
+    cardsEl.textContent = '';
+
+    if (tools.length === 0) {
+      var noData = document.createElement('div');
+      noData.style.cssText = 'color:var(--text3);padding:20px;text-align:center';
+      noData.textContent = 'No AI tool usage data found. Install Codex, Claude Code, or Cursor to see usage.';
+      cardsEl.appendChild(noData);
+    }
+
+    tools.forEach(function(tool) {
+      cardsEl.appendChild(buildUsageToolCard(tool));
+    });
+
+    // Sessions table (Codex sessions sorted by tokens)
+    var tbody = document.getElementById('usageSessionTable');
+    tbody.textContent = '';
+
+    var allSessions = [];
+    tools.forEach(function(tool) {
+      if (tool.sessions) {
+        tool.sessions.forEach(function(s) {
+          allSessions.push({ tool: tool.app, session: s });
+        });
+      }
+    });
+
+    // Sort by tokens descending
+    allSessions.sort(function(a, b) { return (b.session.tokensUsed || 0) - (a.session.tokensUsed || 0); });
+    allSessions = allSessions.slice(0, 50);
+
+    if (allSessions.length === 0) {
+      tbody.appendChild(emptyRow(6, 'No session data available'));
+      return;
+    }
+
+    allSessions.forEach(function(item) {
+      var s = item.session;
+      var tr = document.createElement('tr');
+      var title = s.title || s.session_id || '--';
+      if (title.length > 60) title = title.substring(0, 57) + '...';
+
+      tr.appendChild(td(item.tool));
+      tr.appendChild(td(title));
+      tr.appendChild(td(s.model || 'unknown', 'mono'));
+      tr.appendChild(td(fmtTokens(s.tokensUsed)));
+      tr.appendChild(td(fmtCost(s.estimatedCostUsd)));
+      tr.appendChild(td(fmtDateTime(s.updatedAt)));
+
       tbody.appendChild(tr);
     });
   }).catch(function() {});
@@ -1152,12 +1688,36 @@ function refreshAll() {
   return Promise.all([
     refreshStatus(), refreshProcesses(), refreshAlerts(),
     refreshNetwork(), refreshPorts(), refreshActivity(), refreshApprovals(),
-    refreshSessions(),
+    refreshSessions(), refreshUsage(),
   ]);
 }
 
-refreshAll();
-setInterval(refreshAll, 5000);
+var REFRESH_INTERVAL_MS = 5000;
+var refreshTimer = null;
+
+function startRefreshLoop() {
+  if (refreshTimer) return;
+  refreshAll();
+  refreshTimer = setInterval(refreshAll, REFRESH_INTERVAL_MS);
+}
+
+function stopRefreshLoop() {
+  if (!refreshTimer) return;
+  clearInterval(refreshTimer);
+  refreshTimer = null;
+}
+
+if (document.visibilityState === 'visible') {
+  startRefreshLoop();
+}
+
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'visible') {
+    startRefreshLoop();
+  } else {
+    stopRefreshLoop();
+  }
+});
 
 /* ── WebSocket ───────────────────────────────────────────────── */
 var liveDot   = document.getElementById('liveDot');
@@ -1213,7 +1773,7 @@ var reportModal = document.getElementById('reportModal');
 var modalClose  = document.getElementById('modalClose');
 var reportContent = document.getElementById('reportContent');
 
-reportBtn.addEventListener('click', function() {
+function openReportModal() {
   reportModal.classList.add('open');
   reportContent.textContent = 'Loading report...';
   fetchJSON('/api/report').then(function(data) {
@@ -1221,7 +1781,10 @@ reportBtn.addEventListener('click', function() {
   }).catch(function(err) {
     reportContent.textContent = 'Error loading report: ' + err.message;
   });
-});
+}
+
+reportBtn.addEventListener('click', openReportModal);
+window.openReportModal = openReportModal;
 modalClose.addEventListener('click', function() { reportModal.classList.remove('open'); });
 reportModal.addEventListener('click', function(e) { if (e.target === reportModal) reportModal.classList.remove('open'); });
 

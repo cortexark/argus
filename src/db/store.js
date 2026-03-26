@@ -109,6 +109,26 @@ function getStmts(db) {
       ORDER BY started_at DESC
       LIMIT 100
     `),
+    getOpenSessions: db.prepare(`
+      SELECT * FROM session_history
+      WHERE ended_at IS NULL
+      ORDER BY started_at DESC, id DESC
+    `),
+    insertUsageSnapshot: db.prepare(`
+      INSERT INTO usage_snapshots (app, provider, model, tokens, estimated_cost_usd, session_count, snapshot_data, timestamp)
+      VALUES (@app, @provider, @model, @tokens, @estimatedCostUsd, @sessionCount, @snapshotData, @timestamp)
+    `),
+    getRecentUsageSnapshots: db.prepare(`
+      SELECT * FROM usage_snapshots
+      ORDER BY timestamp DESC
+      LIMIT 200
+    `),
+    getLatestUsageByApp: db.prepare(`
+      SELECT * FROM usage_snapshots
+      WHERE app = ?
+      ORDER BY timestamp DESC
+      LIMIT 1
+    `),
   };
 
   stmtCache.set(db, stmts);
@@ -294,6 +314,78 @@ export function getRecentSessions(db) {
   return stmts.getRecentSessions.all();
 }
 
+/**
+ * Get all currently open sessions (ended_at IS NULL), newest first.
+ * @param {import('better-sqlite3').Database} db
+ * @returns {object[]}
+ */
+export function getOpenSessions(db) {
+  const stmts = getStmts(db);
+  return stmts.getOpenSessions.all();
+}
+
+/**
+ * Reconcile duplicate open sessions after restart.
+ * Keeps the newest open row per pid and closes older open rows.
+ *
+ * @param {import('better-sqlite3').Database} db
+ * @param {string} endedAt - ISO timestamp used to close stale rows
+ * @returns {{ activeSessions: Map<number, { id: number, appLabel: string|null, startedAt: string }>, closedCount: number }}
+ */
+export function reconcileOpenSessionsByPid(db, endedAt = new Date().toISOString()) {
+  const openRows = getOpenSessions(db);
+  const activeSessions = new Map();
+  let closedCount = 0;
+
+  for (const row of openRows) {
+    if (activeSessions.has(row.pid)) {
+      closeSession(db, row.id, endedAt);
+      closedCount++;
+      continue;
+    }
+    activeSessions.set(row.pid, {
+      id: row.id,
+      appLabel: row.app_label,
+      startedAt: row.started_at,
+    });
+  }
+
+  return { activeSessions, closedCount };
+}
+
+/**
+ * Insert a usage snapshot for an AI tool.
+ * @param {import('better-sqlite3').Database} db
+ * @param {{ app, provider, model, tokens, estimatedCostUsd, sessionCount, snapshotData, timestamp }} snapshot
+ * @returns {object} New object with id added
+ */
+export function insertUsageSnapshot(db, snapshot) {
+  const stmts = getStmts(db);
+  const info = stmts.insertUsageSnapshot.run(snapshot);
+  return { ...snapshot, id: info.lastInsertRowid };
+}
+
+/**
+ * Get recent usage snapshots (max 200, newest first).
+ * @param {import('better-sqlite3').Database} db
+ * @returns {object[]}
+ */
+export function getRecentUsageSnapshots(db) {
+  const stmts = getStmts(db);
+  return stmts.getRecentUsageSnapshots.all();
+}
+
+/**
+ * Get the latest usage snapshot for a given app.
+ * @param {import('better-sqlite3').Database} db
+ * @param {string} app
+ * @returns {object|undefined}
+ */
+export function getLatestUsageByApp(db, app) {
+  const stmts = getStmts(db);
+  return stmts.getLatestUsageByApp.get(app);
+}
+
 export function setApprovalDecision(db, alertId, decision) {
   const stmts = getStmts(db);
   stmts.setApprovalDecision.run({ alertId, decision, decidedAt: new Date().toISOString() });
@@ -325,4 +417,9 @@ export default {
   insertSession,
   closeSession,
   getRecentSessions,
+  getOpenSessions,
+  reconcileOpenSessionsByPid,
+  insertUsageSnapshot,
+  getRecentUsageSnapshots,
+  getLatestUsageByApp,
 };

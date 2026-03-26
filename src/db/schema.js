@@ -146,6 +146,20 @@ export function initializeDatabase(dbPath) {
     CREATE INDEX IF NOT EXISTS idx_session_started ON session_history(started_at DESC);
 
     CREATE INDEX IF NOT EXISTS idx_file_access_app ON file_access_events(app_label, timestamp);
+
+    CREATE TABLE IF NOT EXISTS usage_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      app TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      model TEXT,
+      tokens INTEGER NOT NULL DEFAULT 0,
+      estimated_cost_usd REAL NOT NULL DEFAULT 0,
+      session_count INTEGER NOT NULL DEFAULT 0,
+      snapshot_data TEXT,
+      timestamp TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_usage_timestamp ON usage_snapshots(timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_usage_app ON usage_snapshots(app, timestamp DESC);
   `);
 
   // Migration: add bytes columns if they don't exist (for pre-existing databases)
