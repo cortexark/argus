@@ -6,12 +6,17 @@
 
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { initializeDatabase } from '../../src/db/schema.js';
 import {
   insertProcessSnapshot,
   insertFileAccess,
   insertNetworkEvent,
   upsertPortHistory,
+  insertSession,
+  closeSession,
 } from '../../src/db/store.js';
 import { startWebServer, WEB_PORT } from '../../src/web/server.js';
 import { createBroadcaster } from '../../src/web/ws-broadcaster.js';
@@ -59,6 +64,13 @@ try {
 const NOW = new Date().toISOString();
 const PAST_1H = new Date(Date.now() - 3600 * 1000).toISOString();
 
+const TEST_SETTINGS_DIR = mkdtempSync(join(tmpdir(), 'argus-web-settings-'));
+const TEST_SETTINGS_PATH = join(TEST_SETTINGS_DIR, 'settings.json');
+process.env.ARGUS_SETTINGS_PATH = TEST_SETTINGS_PATH;
+process.env.ARGUS_SKIP_RESTART = '1';
+process.env.ARGUS_SKIP_DAEMON_UNINSTALL = '1';
+process.env.ARGUS_SKIP_DATA_DELETE = '1';
+
 // Seed process snapshots
 insertProcessSnapshot(db, {
   pid: 101, name: 'Claude', appLabel: 'Claude Desktop', category: 'LLM',
@@ -96,6 +108,23 @@ upsertPortHistory(db, {
   port: 443, firstSeen: PAST_1H, lastSeen: NOW,
 });
 
+// Seed sessions (one running, one ended)
+const runningSession = insertSession(db, {
+  pid: 9001,
+  appLabel: 'Claude Desktop',
+  processName: 'Claude',
+  cmd: 'Claude',
+  startedAt: NOW,
+});
+const endedSession = insertSession(db, {
+  pid: 9002,
+  appLabel: 'Cursor',
+  processName: 'cursor',
+  cmd: 'cursor',
+  startedAt: PAST_1H,
+});
+closeSession(db, endedSession.id, NOW);
+
 // Start server on a different port from default to avoid conflicts
 const TEST_PORT = 13131;
 let server;
@@ -123,8 +152,18 @@ await asyncTest('GET /api/status returns correct shape', async () => {
   const body = await res.json();
   assert.ok(typeof body.running === 'boolean', 'running should be boolean');
   assert.ok(typeof body.uptime === 'number', 'uptime should be number');
+  assert.ok(typeof body.privacyMode === 'string', 'privacyMode should be string');
   assert.ok(typeof body.processCount === 'number', 'processCount should be number');
   assert.ok(typeof body.alertCount === 'number', 'alertCount should be number');
+});
+
+await asyncTest('GET /api/status includes mode configuration metadata', async () => {
+  const res = await fetch(`${BASE_URL}/api/status`);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.ok(['basic', 'deep'].includes(body.privacyMode), 'privacyMode should be basic|deep');
+  assert.ok(['basic', 'deep'].includes(body.configuredPrivacyMode), 'configuredPrivacyMode should be basic|deep');
+  assert.ok(typeof body.restartRequired === 'boolean', 'restartRequired should be boolean');
 });
 
 await asyncTest('GET /api/status returns processCount > 0 with seeded data', async () => {
@@ -198,6 +237,129 @@ await asyncTest('GET /api/injections returns an array', async () => {
   assert.equal(res.status, 200);
   const body = await res.json();
   assert.ok(Array.isArray(body), 'injections should be an array');
+});
+
+await asyncTest('GET /api/approvals returns pending sensitive alerts', async () => {
+  const res = await fetch(`${BASE_URL}/api/approvals`);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.ok(Array.isArray(body), 'approvals should be an array');
+  assert.ok(body.length >= 1, 'approvals should include seeded credentials alert');
+  assert.ok(
+    body.every((row) => ['pending', 'approved', 'denied'].includes(row.decision)),
+    'each approval row should include a valid decision state',
+  );
+});
+
+await asyncTest('POST /api/approvals/decide persists decision and reflects in GET /api/approvals', async () => {
+  const approvalsRes = await fetch(`${BASE_URL}/api/approvals`);
+  const approvals = await approvalsRes.json();
+  assert.ok(approvals.length >= 1, 'need at least one approval row to test decisions');
+  const target = approvals[0];
+
+  const decideRes = await fetch(`${BASE_URL}/api/approvals/decide`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: target.id, decision: 'approved' }),
+  });
+  assert.equal(decideRes.status, 200, `Expected 200, got ${decideRes.status}`);
+  const decideBody = await decideRes.json();
+  assert.equal(decideBody.ok, true, 'decision endpoint should return ok=true');
+
+  const recheckRes = await fetch(`${BASE_URL}/api/approvals`);
+  const recheck = await recheckRes.json();
+  const updated = recheck.find((row) => row.id === target.id);
+  assert.ok(updated, 'updated approval row should still be present');
+  assert.equal(updated.decision, 'approved', 'decision should persist as approved');
+});
+
+await asyncTest('POST /api/approvals/decide with invalid decision returns 400', async () => {
+  const res = await fetch(`${BASE_URL}/api/approvals/decide`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: 1, decision: 'maybe' }),
+  });
+  assert.equal(res.status, 400);
+});
+
+await asyncTest('POST /api/privacy-mode persists requested mode to settings file', async () => {
+  const res = await fetch(`${BASE_URL}/api/privacy-mode`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode: 'deep' }),
+  });
+  assert.equal(res.status, 200, `Expected 200, got ${res.status}`);
+  const body = await res.json();
+  assert.equal(body.ok, true, 'privacy mode endpoint should return ok=true');
+  assert.equal(body.configuredPrivacyMode, 'deep');
+
+  const persisted = JSON.parse(readFileSync(TEST_SETTINGS_PATH, 'utf8'));
+  assert.equal(persisted.privacyMode, 'deep', 'settings file should persist deep mode');
+});
+
+await asyncTest('POST /api/privacy-mode with invalid mode returns 400', async () => {
+  const res = await fetch(`${BASE_URL}/api/privacy-mode`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode: 'invalid' }),
+  });
+  assert.equal(res.status, 400);
+});
+
+await asyncTest('POST /api/app/restart returns restarting acknowledgement', async () => {
+  const res = await fetch(`${BASE_URL}/api/app/restart`, { method: 'POST' });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.ok, true);
+  assert.equal(body.restarting, true);
+});
+
+await asyncTest('GET /api/app/uninstall-info returns uninstall metadata', async () => {
+  const res = await fetch(`${BASE_URL}/api/app/uninstall-info`);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.ok(typeof body.appPath === 'string' && body.appPath.length > 0, 'appPath should be present');
+  assert.ok(typeof body.dataDir === 'string' && body.dataDir.length > 0, 'dataDir should be present');
+  assert.ok(typeof body.serviceCommand === 'string', 'serviceCommand should be present');
+});
+
+await asyncTest('POST /api/app/uninstall-service returns success payload', async () => {
+  const res = await fetch(`${BASE_URL}/api/app/uninstall-service`, { method: 'POST' });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.ok, true);
+  assert.ok(typeof body.message === 'string' && body.message.length > 0, 'message should be present');
+});
+
+await asyncTest('POST /api/app/uninstall-data requires explicit confirmation', async () => {
+  const res = await fetch(`${BASE_URL}/api/app/uninstall-data`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirm: false }),
+  });
+  assert.equal(res.status, 400);
+});
+
+await asyncTest('POST /api/app/uninstall-data with confirmation returns success payload', async () => {
+  const res = await fetch(`${BASE_URL}/api/app/uninstall-data`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirm: true }),
+  });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.ok, true);
+  assert.ok(typeof body.message === 'string' && body.message.length > 0, 'message should be present');
+});
+
+await asyncTest('GET /api/sessions includes started_at and ended_at fields', async () => {
+  const res = await fetch(`${BASE_URL}/api/sessions`);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.ok(Array.isArray(body), 'sessions should be an array');
+  assert.ok(body.length >= 2, 'sessions should include seeded running + ended sessions');
+  assert.ok(body.some((s) => typeof s.started_at === 'string' && s.started_at.length > 0), 'at least one session should have started_at');
+  assert.ok(body.some((s) => typeof s.ended_at === 'string' && s.ended_at.length > 0), 'at least one session should have ended_at');
 });
 
 // --- Routing and error handling ---
@@ -332,5 +494,10 @@ test('createBroadcaster: broadcast returns object with broadcast function', () =
 
 // --- Cleanup ---
 server.close();
+rmSync(TEST_SETTINGS_DIR, { recursive: true, force: true });
+delete process.env.ARGUS_SETTINGS_PATH;
+delete process.env.ARGUS_SKIP_RESTART;
+delete process.env.ARGUS_SKIP_DAEMON_UNINSTALL;
+delete process.env.ARGUS_SKIP_DATA_DELETE;
 
 export const results = { passed, failed };

@@ -11,6 +11,7 @@ import pkg from 'electron';
 const { Menu, shell, dialog, nativeImage } = pkg;
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { homedir } from 'node:os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const POLL_INTERVAL_MS = 5000;
@@ -72,6 +73,55 @@ export function setupTray(mb) {
   let paused = false;
   let pollTimer = null;
   let lastIconState = 'none';
+  let currentMenu = null;
+  const argusDataDir = join(homedir(), '.argus');
+
+  async function setMonitoringPaused(nextPaused) {
+    try {
+      // Sync against backend in case local state is stale.
+      const status = await fetchStatus();
+      paused = Boolean(status.paused);
+
+      if (paused !== nextPaused) {
+        const res = await fetch('http://127.0.0.1:3131/api/monitoring/toggle', { method: 'POST' });
+        const data = await res.json();
+        paused = Boolean(data.paused);
+      }
+
+      if (paused !== nextPaused) {
+        throw new Error(nextPaused ? 'Unable to stop monitoring.' : 'Unable to start monitoring.');
+      }
+    } catch (err) {
+      dialog.showErrorBox('Argus', `Could not update monitoring state: ${err.message}`);
+    }
+    updateBadge();
+  }
+
+  async function showUninstallHelp() {
+    const result = await dialog.showMessageBox({
+      type: 'question',
+      title: 'Uninstall Argus',
+      message: 'Choose what you want to remove.',
+      detail:
+        'For the DMG app:\n' +
+        '1) Quit Argus\n' +
+        '2) Move Argus.app to Trash\n\n' +
+        'Optional cleanup:\n' +
+        '- Remove local data folder ~/.argus',
+      buttons: ['Reveal Argus.app in Finder', 'Open ~/.argus Folder', 'Close'],
+      defaultId: 2,
+      cancelId: 2,
+      noLink: true,
+    });
+
+    if (result.response === 0) {
+      shell.showItemInFolder(process.execPath);
+      return;
+    }
+    if (result.response === 1) {
+      shell.openPath(argusDataDir);
+    }
+  }
 
   function buildContextMenu(alertCount, hasCritical) {
     const statusLabel = paused
@@ -102,24 +152,43 @@ export function setupTray(mb) {
         label: 'Generate Report',
         click: () => {
           mb.showWindow();
-          mb.window?.webContents.executeJavaScript(
-            "document.querySelector('[data-tab=\"report\"]')?.click()",
-          );
+          const wc = mb.window?.webContents;
+          if (!wc) return;
+
+          const openReportScript = `(() => {
+            if (typeof window.openReportModal === 'function') {
+              window.openReportModal();
+              return true;
+            }
+            const reportBtn = document.getElementById('reportBtn');
+            if (reportBtn) {
+              reportBtn.click();
+              return true;
+            }
+            return false;
+          })();`;
+
+          const openReport = () => {
+            wc.executeJavaScript(openReportScript).catch(() => {
+              // Best effort only; if the renderer is unavailable users can still use Open in Browser.
+            });
+          };
+
+          if (wc.isLoadingMainFrame()) {
+            wc.once('did-finish-load', openReport);
+          } else {
+            openReport();
+          }
         },
       },
       { type: 'separator' },
       {
-        label: paused ? '▶  Start Monitoring' : '⏸  Pause Monitoring',
-        click: async () => {
-          try {
-            const res = await fetch('http://127.0.0.1:3131/api/monitoring/toggle', { method: 'POST' });
-            const data = await res.json();
-            paused = data.paused;
-          } catch (err) {
-            dialog.showErrorBox('Argus', `Could not toggle monitoring: ${err.message}`);
-          }
-          updateBadge();
-        },
+        label: paused ? '▶  Start Monitoring' : '■  Stop Monitoring',
+        click: () => setMonitoringPaused(!paused),
+      },
+      {
+        label: 'Uninstall Argus…',
+        click: () => showUninstallHelp(),
       },
       { type: 'separator' },
       {
@@ -189,12 +258,23 @@ export function setupTray(mb) {
             : 'Argus — Monitoring active',
     );
 
-    // Update context menu with fresh count
-    mb.tray.setContextMenu(buildContextMenu(count, hasCritical));
+    // Keep context menu up to date without binding it to left-click on macOS.
+    // Left-click should open the menubar window only; right-click opens this menu.
+    currentMenu = buildContextMenu(count, hasCritical);
+    if (process.platform !== 'darwin') {
+      mb.tray.setContextMenu(currentMenu);
+    }
   }
 
   // Initial setup
-  mb.tray.setContextMenu(buildContextMenu(0, false));
+  currentMenu = buildContextMenu(0, false);
+  if (process.platform !== 'darwin') {
+    mb.tray.setContextMenu(currentMenu);
+  } else {
+    mb.tray.on('right-click', () => {
+      mb.tray.popUpContextMenu(currentMenu);
+    });
+  }
   updateBadge();
 
   // Poll for badge updates

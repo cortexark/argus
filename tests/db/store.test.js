@@ -16,6 +16,10 @@ import {
   getActiveProcesses,
   getNetworkEvents,
   getDailySummary,
+  insertSession,
+  closeSession,
+  getOpenSessions,
+  reconcileOpenSessionsByPid,
 } from '../../src/db/store.js';
 
 let passed = 0;
@@ -259,6 +263,71 @@ test('getDailySummary: date field matches requested date', () => {
   const dateStr = '2024-01-15';
   const summary = getDailySummary(db, dateStr);
   assert.equal(summary.date, dateStr);
+});
+
+// --- session restart reconciliation ---
+
+test('getOpenSessions: returns only sessions with ended_at null', () => {
+  const open = insertSession(db, {
+    pid: 91001,
+    appLabel: 'Claude Code (CLI)',
+    processName: 'claude',
+    cmd: 'claude chat',
+    startedAt: NOW,
+  });
+  const closed = insertSession(db, {
+    pid: 91002,
+    appLabel: 'Cursor',
+    processName: 'cursor',
+    cmd: 'cursor .',
+    startedAt: NOW,
+  });
+  closeSession(db, closed.id, NOW);
+
+  const openSessions = getOpenSessions(db);
+  const openIds = new Set(openSessions.map(s => s.id));
+
+  assert.ok(openIds.has(open.id), 'open session should be returned');
+  assert.ok(!openIds.has(closed.id), 'closed session should not be returned');
+});
+
+test('reconcileOpenSessionsByPid: closes duplicate open rows for same pid', () => {
+  const pid = 91003;
+  const oldStartedAt = '2026-03-23T10:00:00.000Z';
+  const newStartedAt = '2026-03-23T10:05:00.000Z';
+  const reconciledAt = '2026-03-23T10:10:00.000Z';
+
+  const oldSession = insertSession(db, {
+    pid,
+    appLabel: 'Claude Code (CLI)',
+    processName: 'claude',
+    cmd: 'claude old',
+    startedAt: oldStartedAt,
+  });
+  const newSession = insertSession(db, {
+    pid,
+    appLabel: 'Claude Code (CLI)',
+    processName: 'claude',
+    cmd: 'claude new',
+    startedAt: newStartedAt,
+  });
+  insertSession(db, {
+    pid: 91004,
+    appLabel: 'Cursor',
+    processName: 'cursor',
+    cmd: 'cursor .',
+    startedAt: newStartedAt,
+  });
+
+  const result = reconcileOpenSessionsByPid(db, reconciledAt);
+  assert.equal(result.closedCount, 1, 'one stale duplicate row should be closed');
+  assert.ok(result.activeSessions.size >= 2, 'active session map should keep one row per pid');
+  assert.equal(result.activeSessions.get(pid)?.id, newSession.id, 'newest row should remain active');
+
+  const oldRow = db.prepare('SELECT ended_at FROM session_history WHERE id = ?').get(oldSession.id);
+  const newRow = db.prepare('SELECT ended_at FROM session_history WHERE id = ?').get(newSession.id);
+  assert.equal(oldRow.ended_at, reconciledAt, 'older duplicate should be closed');
+  assert.equal(newRow.ended_at, null, 'newest row should remain open');
 });
 
 console.log(`\n  Results: ${passed} passed, ${failed} failed\n`);

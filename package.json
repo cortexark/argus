@@ -33,11 +33,13 @@
     "start": "node src/index.js",
     "dashboard": "node src/dashboard.js",
     "report": "node src/report.js",
-    "test": "node --experimental-vm-modules tests/run.js",
-    "electron:dev": "electron electron/main.js",
+    "node:rebuild": "npm rebuild better-sqlite3",
+    "test": "npm run node:rebuild && node --experimental-vm-modules tests/run.js",
+    "test:electron-runtime": "npm run electron:rebuild && node tests/build/electron-runtime-smoke.test.js",
+    "electron:dev": "npm run electron:rebuild && electron electron/main.js",
     "electron:rebuild": "electron-rebuild -f -w better-sqlite3",
-    "electron:build": "electron-builder --mac dmg",
-    "electron:build:linux": "electron-builder --linux AppImage"
+    "electron:build": "npm run electron:rebuild && electron-builder --mac dmg",
+    "electron:build:linux": "npm run electron:rebuild && electron-builder --linux AppImage"
   },
   "build": {
     "appId": "dev.argus.monitor",
@@ -70,6 +72,7 @@
     "chalk": "^5.3.0",
     "chokidar": "^5.0.0",
     "cli-table3": "^0.6.5",
+    "menubar": "^9.5.2",
     "node-notifier": "^10.0.1",
     "nodemailer": "^8.0.2",
     "pino": "^10.3.1",
@@ -85,7 +88,6 @@
     "@electron/rebuild": "^4.0.3",
     "@playwright/test": "^1.58.2",
     "electron": "^34.5.8",
-    "electron-builder": "^26.8.1",
-    "menubar": "^9.5.2"
+    "electron-builder": "^26.8.1"
   }
 }

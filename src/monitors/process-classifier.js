@@ -10,6 +10,7 @@
 
 import { execCommand } from '../lib/exec.js';
 import { IS_MAC, IS_LINUX } from '../lib/platform.js';
+import { config } from '../lib/config.js';
 import { AI_APPS, AI_ENDPOINTS } from '../ai-apps.js';
 
 // ---------------------------------------------------------------------------
@@ -306,7 +307,7 @@ async function collectNetworkEndpoints(pid) {
  * @returns {Promise<boolean>}
  */
 async function collectTccAccess(procName) {
-  if (!IS_MAC) return false;
+  if (!IS_MAC || config.PRIVACY_MODE === 'basic') return false;
   try {
     const tccDbPath = `${process.env.HOME}/Library/Application Support/com.apple.TCC/TCC.db`;
     const query = `SELECT client FROM access WHERE service='kTCCServiceSystemPolicyAllFiles' AND auth_value=2`;
