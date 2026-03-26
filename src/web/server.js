@@ -103,10 +103,29 @@ function uninstallLocalData(confirm) {
   }
 }
 
+/** @type {(() => void) | null} */
+let _restartCallback = null;
+
+/**
+ * Register a callback that will be invoked when the user triggers a restart
+ * from the dashboard. In Electron, main.js sets this to app.relaunch()+exit.
+ * @param {() => void} fn
+ */
+export function onRestartRequested(fn) {
+  _restartCallback = fn;
+}
+
 async function triggerAppRestart() {
   // Test guard: allow endpoint behavior to be validated without terminating test process.
   if (process.env.ARGUS_SKIP_RESTART === '1') return;
 
+  // Electron sets a restart callback from the main process where `app` is available.
+  if (_restartCallback) {
+    _restartCallback();
+    return;
+  }
+
+  // Fallback for non-Electron: try dynamic import of electron
   if (process.versions?.electron) {
     try {
       const electronMod = await import('electron');

@@ -1050,7 +1050,7 @@ function refreshStatus() {
     chip.textContent = upStr ? 'up ' + upStr : '';
 
     var activeMode = data.privacyMode === 'deep' ? 'deep' : 'basic';
-    var configuredMode = data.configuredPrivacyMode === 'deep' ? 'deep' : activeMode;
+    var configuredMode = data.configuredPrivacyMode === 'deep' ? 'deep' : 'basic';
     var restartRequired = data.restartRequired === true;
 
     if (modeChip) {

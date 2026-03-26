@@ -5,13 +5,96 @@
  */
 
 import pkg from 'electron';
-const { app } = pkg;
+const { app, dialog } = pkg;
 import { menubar } from 'menubar';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { appendFileSync, mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { setupTray } from './tray.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const STARTUP_LOG_PATH = join(homedir(), '.argus', 'logs', 'electron-startup.log');
+const SETTINGS_PATH = join(homedir(), '.argus', 'settings.json');
+const ONBOARDING_VERSION = 1;
+
+// Stability-first defaults for production: prevent macOS/Electron GPU compositor
+// issues that can manifest as blank/black windows on tab interactions.
+app.disableHardwareAcceleration();
+app.commandLine.appendSwitch('disable-gpu');
+app.commandLine.appendSwitch('disable-gpu-compositing');
+
+function normalizePrivacyMode(mode) {
+  return mode === 'deep' ? 'deep' : 'basic';
+}
+
+function loadSettings() {
+  try {
+    if (!existsSync(SETTINGS_PATH)) return {};
+    const raw = readFileSync(SETTINGS_PATH, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return {};
+    return parsed;
+  } catch {
+    return {};
+  }
+}
+
+function saveSettings(settings) {
+  try {
+    mkdirSync(dirname(SETTINGS_PATH), { recursive: true });
+    writeFileSync(SETTINGS_PATH, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+  } catch {
+    // Non-fatal best effort
+  }
+}
+
+async function ensureInstallMessaging() {
+  // Honor explicit env overrides for CI/testing/manual power users.
+  if (process.env.ARGUS_PRIVACY_MODE) {
+    return normalizePrivacyMode(process.env.ARGUS_PRIVACY_MODE);
+  }
+
+  const settings = loadSettings();
+  if (settings.onboardingVersion === ONBOARDING_VERSION) {
+    const mode = normalizePrivacyMode(settings.privacyMode);
+    process.env.ARGUS_PRIVACY_MODE = mode;
+    return mode;
+  }
+
+  const res = await dialog.showMessageBox({
+    type: 'info',
+    title: 'Welcome to Argus',
+    message: 'Argus monitors AI activity on your laptop.',
+    detail:
+      'Why macOS may show a permission prompt:\n' +
+      'Argus can inspect cross-app AI activity (files, browser profiles, and credentials) in Deep Monitoring mode.\n\n' +
+      'Start in Basic Mode to avoid that prompt and monitor process/network activity first.\n\n' +
+      'Argus runs locally on this Mac. Your data is not uploaded by default.',
+    buttons: ['Start in Basic Mode (Recommended)', 'Enable Deep Monitoring'],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  });
+
+  const mode = res.response === 1 ? 'deep' : 'basic';
+  process.env.ARGUS_PRIVACY_MODE = mode;
+  saveSettings({
+    onboardingVersion: ONBOARDING_VERSION,
+    privacyMode: mode,
+    updatedAt: new Date().toISOString(),
+  });
+  return mode;
+}
+
+function logStartup(line) {
+  try {
+    mkdirSync(dirname(STARTUP_LOG_PATH), { recursive: true });
+    appendFileSync(STARTUP_LOG_PATH, `[${new Date().toISOString()}] ${line}\n`);
+  } catch {
+    // Best effort logging only
+  }
+}
 
 // Single instance lock — prevent multiple Argus windows
 const gotLock = app.requestSingleInstanceLock();
@@ -26,19 +109,47 @@ if (process.platform === 'darwin') {
 }
 
 app.whenReady().then(async () => {
+  logStartup('Electron app.whenReady triggered');
+  const privacyMode = await ensureInstallMessaging();
+  logStartup(`Privacy mode selected: ${privacyMode}`);
+
   // Start the Argus monitoring backend
   let argusStop = null;
   try {
+    logStartup('Importing backend module ../src/index.js');
     const { start, stop } = await import('../src/index.js');
-    await start({ noWatch: false, noWeb: false, noNotify: false, noIpc: false });
+    logStartup('Backend module import succeeded');
+    await start({
+      noWatch: false,
+      noWeb: false,
+      noNotify: false,
+      noIpc: false,
+      privacyMode,
+    });
+    logStartup('Backend start() succeeded');
     argusStop = stop;
+
+    // Register restart callback so the dashboard "Restart" button works in Electron
+    try {
+      const { onRestartRequested } = await import('../src/web/server.js');
+      onRestartRequested(() => {
+        logStartup('Restart requested from dashboard');
+        app.relaunch();
+        app.exit(0);
+      });
+      logStartup('Restart callback registered');
+    } catch (err) {
+      logStartup(`Could not register restart callback: ${err.message}`);
+    }
   } catch (err) {
     console.error('[Argus] Backend failed to start:', err.message);
+    logStartup(`Backend failed to start: ${err?.stack || err?.message || err}`);
     // Continue — the tray will show connection error in UI
   }
 
   // Wait briefly for web server to be ready
   await waitForWebServer('http://127.0.0.1:3131/api/status', 5000);
+  logStartup('waitForWebServer completed');
 
   const iconPath = join(__dirname, 'assets',
     process.platform === 'darwin' ? 'iconTemplate.png' : 'icon.png'
@@ -48,6 +159,7 @@ app.whenReady().then(async () => {
     index: 'http://127.0.0.1:3131',
     icon: iconPath,
     browserWindow: {
+      backgroundColor: '#0a0e14',
       width: 900,
       height: 650,
       resizable: true,
@@ -58,17 +170,15 @@ app.whenReady().then(async () => {
         backgroundThrottling: true,
       },
     },
-    preloadWindow: true,
+    // Keep renderer out of memory until the user actually opens the window.
+    preloadWindow: false,
     showOnAllWorkspaces: false,
     showDockIcon: false,
   });
 
   mb.on('ready', () => {
+    logStartup('Menubar ready');
     setupTray(mb);
-  });
-
-  mb.on('after-show', () => {
-    mb.window?.webContents.reload();
   });
 
   // Handle second instance — show window
@@ -77,6 +187,7 @@ app.whenReady().then(async () => {
   });
 
   app.on('before-quit', async () => {
+    logStartup('before-quit invoked');
     if (argusStop) {
       try { await argusStop(); } catch { /* ignore */ }
     }
