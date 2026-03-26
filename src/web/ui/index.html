@@ -1022,7 +1022,7 @@ function renderFeed() {
   }
   feedEvents.forEach(function(e) {
     var item = document.createElement('div'); item.className = 'feed-item';
-    var timeEl = document.createElement('span'); timeEl.className = 'feed-time'; timeEl.textContent = fmtTime(e.ts);
+    var timeEl = document.createElement('span'); timeEl.className = 'feed-time'; timeEl.textContent = fmtDateTime(e.ts);
     var typeEl = document.createElement('span'); typeEl.className = 'feed-type ' + e.type; typeEl.textContent = e.type.replace('_', ' ');
     var msgEl  = document.createElement('span'); msgEl.className  = 'feed-msg';  msgEl.textContent = e.msg;
     item.appendChild(timeEl); item.appendChild(typeEl); item.appendChild(msgEl);
@@ -1146,7 +1146,7 @@ function refreshAlerts() {
         ? a.app_label
         : (a.process_name && a.process_name !== 'chokidar-watcher' ? a.process_name : 'macOS System');
 
-      tr.appendChild(td(fmtTime(a.timestamp), 'mono'));
+      tr.appendChild(td(fmtDateTime(a.timestamp), 'mono'));
       var appTd = document.createElement('td');
       appTd.innerHTML = '<strong>' + esc(appDisplay) + '</strong>';
       tr.appendChild(appTd);
@@ -1186,7 +1186,7 @@ function refreshNetwork() {
       var tr = document.createElement('tr');
       var isKnown = !!e.ai_service;
       if (!isKnown) tr.className = 'row-unknown-net';
-      tr.appendChild(td(fmtTime(e.timestamp), 'mono'));
+      tr.appendChild(td(fmtDateTime(e.timestamp), 'mono'));
       var appTd = document.createElement('td');
       appTd.innerHTML = '<strong>' + esc(e.app_label || e.process_name || '--') + '</strong>';
       tr.appendChild(appTd);
@@ -1253,7 +1253,7 @@ function refreshApprovals() {
       info.appendChild(appEl); info.appendChild(pathEl);
 
       var timeEl = document.createElement('div'); timeEl.className = 'approval-time';
-      timeEl.textContent = fmtTime(item.timestamp);
+      timeEl.textContent = fmtDateTime(item.timestamp);
 
       var acts = document.createElement('div'); acts.className = 'approval-actions';
       if (item.decision === 'pending') {
