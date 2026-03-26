@@ -50,16 +50,19 @@ function saveSettings(settings) {
 }
 
 async function ensureInstallMessaging() {
-  // Honor explicit env overrides for CI/testing/manual power users.
-  if (process.env.ARGUS_PRIVACY_MODE) {
-    return normalizePrivacyMode(process.env.ARGUS_PRIVACY_MODE);
-  }
-
+  // Always read settings.json first — it reflects the user's latest choice
+  // (including mode changes via the dashboard that require a restart).
+  // Only fall back to ARGUS_PRIVACY_MODE env var if no settings file exists
+  // (CI/testing/manual power users).
   const settings = loadSettings();
   if (settings.onboardingVersion === ONBOARDING_VERSION) {
     const mode = normalizePrivacyMode(settings.privacyMode);
     process.env.ARGUS_PRIVACY_MODE = mode;
     return mode;
+  }
+
+  if (process.env.ARGUS_PRIVACY_MODE) {
+    return normalizePrivacyMode(process.env.ARGUS_PRIVACY_MODE);
   }
 
   const res = await dialog.showMessageBox({
