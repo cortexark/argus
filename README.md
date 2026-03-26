@@ -14,6 +14,28 @@ AI desktop applications like Claude, Cursor, ChatGPT, and GitHub Copilot run on 
 
 Argus fills that gap with transparent, real-time monitoring built on open-source tooling you can inspect.
 
+## Dashboard
+
+Argus runs as a macOS menubar app with a web dashboard at `localhost:3131`. Here's what it looks like monitoring a live machine with Claude Desktop, Claude Code, Ollama, and Python running.
+
+### Privacy Monitoring — Overview
+
+![Argus Overview](docs/screenshots/01-overview.png)
+
+The Overview tab shows everything at a glance: 5 active AI apps detected, 37 file access alerts (credentials, browser data, system files), and real-time activity feed. The **Sensitive Access Review** panel lets you mark each file access as "Expected" or "Suspicious" — Argus observes and alerts, it does not block. Claude Desktop was caught accessing Safari bookmarks, Keychain databases, SSH agent sockets, and `/etc/hosts` — all flagged with severity badges (Credentials, Browser Data, Documents, System).
+
+### AI Tool Usage Tracking
+
+![Argus Usage](docs/screenshots/02-usage.png)
+
+The Usage tab (inspired by [TermTracker](https://github.com/isaacaudet/TermTracker)) reads local session data from your AI coding tools and calculates what your usage would cost at standard API rates. In this example: **634.6M tokens consumed across 21 Codex sessions, equivalent to $4.4K at API pricing**. The per-tool cards show model breakdowns (gpt-5.3-codex: 494M tokens, unknown: 140.7M, gpt-5.4-mini: 12.1K) with color-coded distribution bars. The session table ranks every conversation by token usage so you can see which tasks consumed the most resources. Supports Codex (SQLite), Claude Code (JSONL metrics), and Cursor (SQLite tracking DB).
+
+### File Access Alerts
+
+![Argus File Alerts](docs/screenshots/03-file-alerts.png)
+
+The File Alerts tab shows every sensitive file access by AI apps with timestamps, file paths, and severity classification. Each row shows exactly when (11:05:10 PM), which app (Claude Desktop), what file (`/Users/.../keychain-2.db`), and what category (Credentials, Browser Data, Documents, System). This is the raw evidence trail — every time an AI app touches your SSH keys, Keychain, Safari data, or system files, it's logged here.
+
 ### The Problem
 
 - Claude might read `/Documents/secret-project.md` — does it contain sensitive data?
@@ -170,6 +192,16 @@ The installer will:
 4. Start the daemon
 5. Print command reference
 
+### First Launch Permission Message (macOS app)
+
+On first launch, Argus now shows a clear choice:
+
+- **Start in Basic Mode (Recommended)** — process + network monitoring, reduced permissions
+- **Enable Deep Monitoring** — includes cross-app file access detection (may trigger the macOS prompt:  
+  `"Argus" would like to access data from other apps.`)
+
+Argus runs locally on your Mac by default.
+
 ## Commands
 
 ### Service Management
@@ -300,7 +332,9 @@ argus tcc                  # Check which AI apps have Full Disk Access
 
 | App | Category | Process Name |
 |-----|----------|--------------|
-| Claude | LLM Desktop | `claude`, `Claude` |
+| Claude Code | AI Code Editor | `claude` |
+| Claude Desktop | LLM Desktop | `Claude` |
+| OpenAI Codex | AI Code Editor | `codex` |
 | ChatGPT | LLM Desktop | `ChatGPT`, `chatgpt` |
 | Cursor | AI Code Editor | `cursor`, `Cursor` |
 | VS Code + Copilot | AI Code Editor | `Code`, `code` |
@@ -366,7 +400,7 @@ All tests are in `/tests`. The test suite includes:
 - Unit tests for classifiers, monitors, and utilities
 - Integration tests for database operations
 - E2E tests for CLI commands
-- **426 tests, 0 failures**
+- **640+ tests, 0 failures**
 
 ### Test Coverage
 
@@ -395,7 +429,8 @@ argus/
 │   │   ├── process-scanner.js      # Process tree builder
 │   │   ├── file-monitor.js         # Watch file access
 │   │   ├── network-monitor.js      # Track network connections
-│   │   └── browser-monitor.js      # Detect browser automation
+│   │   ├── browser-monitor.js      # Detect browser automation
+│   │   └── usage-tracker.js        # AI tool usage (Codex/Claude/Cursor)
 │   ├── db/
 │   │   ├── schema.js               # SQLite schema init
 │   │   └── store.js                # Database CRUD operations
