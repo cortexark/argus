@@ -1,0 +1,92 @@
+name: Build DMG on Merge
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build macOS DMG
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build DMG
+        run: npm run electron:build
+
+      - name: Extract version from package.json
+        id: pkg
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Generate changelog since last release
+        id: changelog
+        run: |
+          PREV_TAG=$(git tag --sort=-version:refname | head -1)
+          if [ -z "$PREV_TAG" ]; then
+            RANGE="HEAD"
+          else
+            RANGE="${PREV_TAG}..HEAD"
+          fi
+          {
+            echo "changelog<<EOF"
+            git log "$RANGE" --pretty=format:"- %s" --no-merges | head -30
+            echo ""
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create or update rolling release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Argus Latest (v${{ steps.pkg.outputs.version }} · ${{ steps.pkg.outputs.short_sha }})"
+          body: |
+            ## Latest Build
+
+            Auto-built from `main` branch at commit ${{ steps.pkg.outputs.short_sha }}.
+
+            ### Changes
+
+            ${{ steps.changelog.outputs.changelog }}
+
+            ### Download
+
+            - **Argus DMG** — macOS Apple Silicon (arm64)
+
+            ### Install from source
+
+            ```bash
+            npm install -g argus-monitor
+            argus install && argus start
+            ```
+          files: |
+            dist/*.dmg
+            dist/*.dmg.blockmap
+          draft: false
+          prerelease: true
+          make_latest: false
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: argus-dmg-${{ steps.pkg.outputs.short_sha }}
+          path: dist/*.dmg
+          retention-days: 30
