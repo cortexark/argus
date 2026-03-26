@@ -85,6 +85,18 @@ export const SENSITIVE_PATHS = {
     '/Downloads',
     '/Desktop',
   ],
+  applications: [
+    '/Applications',
+    '/System/Applications',
+    '/Applications/Utilities',
+  ],
+  cloudSync: [
+    '/Library/Mobile Documents',
+    '/Library/CloudStorage',
+    '/Dropbox',
+    '/Google Drive',
+    '/OneDrive',
+  ],
   system: [
     '/etc/passwd',
     '/etc/hosts',

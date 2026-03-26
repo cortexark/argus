@@ -90,6 +90,16 @@ test('classifyPath: detects /Desktop path as documents', () => {
   assert.equal(result, 'documents');
 });
 
+test('classifyPath: detects /Applications path as applications', () => {
+  const result = classifyPath('/Applications/Safari.app/Contents/Info.plist');
+  assert.equal(result, 'applications');
+});
+
+test('classifyPath: detects iCloud path as cloudSync', () => {
+  const result = classifyPath('/Users/alice/Library/Mobile Documents/com~apple~CloudDocs/notes.txt');
+  assert.equal(result, 'cloudSync');
+});
+
 test('classifyPath: detects .env file as system', () => {
   const result = classifyPath('/home/user/project/.env');
   assert.equal(result, 'system');

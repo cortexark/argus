@@ -30,8 +30,28 @@ const SENSITIVITY_LABELS = {
   credentials: '🔑 Credentials',
   browserData: '🌐 Browser Data',
   documents: '📄 Documents',
+  applications: '🧩 Applications',
+  cloudSync: '☁️ Cloud Sync',
   system: '⚙️ System Files',
 };
+
+const SENSITIVITY_PRIORITY = [
+  'credentials',
+  'browserData',
+  'cloudSync',
+  'documents',
+  'applications',
+  'system',
+];
+
+const SOUND_SENSITIVITIES = new Set([
+  'credentials',
+  'browserData',
+  'documents',
+  'applications',
+  'cloudSync',
+  'system',
+]);
 
 /**
  * Core send function — fires a native OS notification.
@@ -119,11 +139,12 @@ function batchFileAlert(appName, filePath, sensitivity) {
     throttleMap.set(key, Date.now());
 
     const { count, details } = batch;
-    const topSensitivity = details.find(d => d.sensitivity === 'credentials')?.sensitivity
-      || details.find(d => d.sensitivity === 'browserData')?.sensitivity
-      || details[0]?.sensitivity;
+    const topSensitivity = SENSITIVITY_PRIORITY.find((sens) =>
+      details.some((d) => d.sensitivity === sens)
+    ) || details[0]?.sensitivity;
 
     const label = SENSITIVITY_LABELS[topSensitivity] || 'File';
+    const shouldPlaySound = SOUND_SENSITIVITIES.has(topSensitivity);
 
     let message;
     if (count === 1) {
@@ -147,6 +168,7 @@ function batchFileAlert(appName, filePath, sensitivity) {
       title: `Argus — ${appName}`,
       subtitle: count === 1 ? `${label} access detected` : `${count} file alerts`,
       message,
+      sound: shouldPlaySound ? 'Tink' : false,
       urgency: topSensitivity === 'credentials' ? 'critical' : 'normal',
     });
   }, BATCH_WINDOW_MS);
@@ -222,7 +244,7 @@ export const notify = {
       appName,
       `suspicious_port_${port}`,
       `Used unexpected port ${port}\nThis is not a known AI service port.`,
-      { urgency: 'critical' },
+      { urgency: 'critical', sound: true },
     );
   },
 
@@ -262,7 +284,7 @@ export const notify = {
       appName,
       'unknown_domain',
       `DNS query to unknown domain:\n${domain}\n⚠️ Not a recognised AI service.`,
-      { urgency: 'critical' },
+      { urgency: 'critical', sound: true },
     );
   },
 

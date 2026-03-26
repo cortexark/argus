@@ -476,6 +476,9 @@
     .sev-credentials { background: var(--sev-critical-bg); color: var(--sev-critical); border: 1px solid var(--sev-critical-bd); }
     .sev-browserData  { background: var(--sev-high-bg);    color: var(--sev-high);     border: 1px solid var(--sev-high-bd); }
     .sev-documents    { background: var(--sev-medium-bg);  color: var(--sev-medium);   border: 1px solid var(--sev-medium-bd); }
+    .sev-applications { background: var(--sev-high-bg);    color: var(--sev-high);     border: 1px solid var(--sev-high-bd); }
+    .sev-cloudSync    { background: var(--sev-medium-bg);  color: var(--sev-medium);   border: 1px solid var(--sev-medium-bd); }
+    .sev-system       { background: var(--sev-critical-bg); color: var(--sev-critical); border: 1px solid var(--sev-critical-bd); }
     .sev-unknown      { background: var(--sev-low-bg);     color: var(--blue);         border: 1px solid var(--sev-low-bd); }
     .sev-ok           { background: var(--sev-ok-bg);      color: var(--sev-ok);       border: 1px solid var(--sev-ok-bd); }
     .sev-running      { background: rgba(88,166,255,0.1);  color: var(--blue);         border: 1px solid rgba(88,166,255,0.3); }
@@ -501,6 +504,9 @@
     tr.row-cred   { border-left: 2px solid var(--sev-critical); }
     tr.row-browser { border-left: 2px solid var(--sev-high); }
     tr.row-doc    { border-left: 2px solid var(--sev-medium); }
+    tr.row-apps   { border-left: 2px solid var(--sev-high); }
+    tr.row-cloud  { border-left: 2px solid var(--sev-medium); }
+    tr.row-system { border-left: 2px solid var(--sev-critical); }
     tr.row-unknown-net { border-left: 2px solid var(--sev-critical); }
 
     /* ── Modal ───────────────────────────────────────────────────── */
@@ -969,6 +975,9 @@ function sevBadge(sens) {
   if (sens === 'credentials') { cls = 'sev-credentials'; label = 'Credentials'; }
   else if (sens === 'browserData') { cls = 'sev-browserData'; label = 'Browser Data'; }
   else if (sens === 'documents') { cls = 'sev-documents'; label = 'Documents'; }
+  else if (sens === 'applications') { cls = 'sev-applications'; label = 'Applications'; }
+  else if (sens === 'cloudSync') { cls = 'sev-cloudSync'; label = 'Cloud Sync'; }
+  else if (sens === 'system') { cls = 'sev-system'; label = 'System Files'; }
   return '<span class="sev ' + cls + '">' + esc(label) + '</span>';
 }
 
@@ -1141,6 +1150,9 @@ function refreshAlerts() {
       if      (sens === 'credentials') tr.className = 'row-cred';
       else if (sens === 'browserData') tr.className = 'row-browser';
       else if (sens === 'documents')   tr.className = 'row-doc';
+      else if (sens === 'applications') tr.className = 'row-apps';
+      else if (sens === 'cloudSync')    tr.className = 'row-cloud';
+      else if (sens === 'system')       tr.className = 'row-system';
 
       var appDisplay = (a.app_label && a.app_label !== 'system')
         ? a.app_label
