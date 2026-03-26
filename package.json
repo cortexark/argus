@@ -38,8 +38,8 @@
     "test:electron-runtime": "npm run electron:rebuild && node tests/build/electron-runtime-smoke.test.js",
     "electron:dev": "npm run electron:rebuild && electron electron/main.js",
     "electron:rebuild": "electron-rebuild -f -w better-sqlite3",
-    "electron:build": "npm run electron:rebuild && electron-builder --mac dmg",
-    "electron:build:linux": "npm run electron:rebuild && electron-builder --linux AppImage"
+    "electron:build": "npm run electron:rebuild && electron-builder --mac dmg --publish never",
+    "electron:build:linux": "npm run electron:rebuild && electron-builder --linux AppImage --publish never"
   },
   "build": {
     "appId": "dev.argus.monitor",

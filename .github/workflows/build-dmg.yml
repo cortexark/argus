@@ -1,8 +1,8 @@
-name: Build DMG on Merge
+name: Build DMG
 
 on:
   push:
-    branches: [main]
+    branches: [main, release]
 
 jobs:
   build:
@@ -29,13 +29,26 @@ jobs:
       - name: Build DMG
         run: npm run electron:build
 
-      - name: Extract version from package.json
-        id: pkg
+      - name: Extract version and branch metadata
+        id: meta
         run: |
           VERSION=$(node -p "require('./package.json').version")
           SHORT_SHA=$(git rev-parse --short HEAD)
+          BRANCH="${GITHUB_REF_NAME}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          if [ "$BRANCH" = "release" ]; then
+            echo "tag=rc-latest" >> "$GITHUB_OUTPUT"
+            echo "release_name=Argus RC (v${VERSION} · ${SHORT_SHA})" >> "$GITHUB_OUTPUT"
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "label=Release Candidate" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+            echo "release_name=Argus Latest (v${VERSION} · ${SHORT_SHA})" >> "$GITHUB_OUTPUT"
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "label=Latest from main" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Generate changelog since last release
         id: changelog
@@ -56,12 +69,12 @@ jobs:
       - name: Create or update rolling release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: "Argus Latest (v${{ steps.pkg.outputs.version }} · ${{ steps.pkg.outputs.short_sha }})"
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.release_name }}
           body: |
-            ## Latest Build
+            ## ${{ steps.meta.outputs.label }}
 
-            Auto-built from `main` branch at commit ${{ steps.pkg.outputs.short_sha }}.
+            Auto-built from `${{ steps.meta.outputs.branch }}` branch at commit ${{ steps.meta.outputs.short_sha }}.
 
             ### Changes
 
@@ -81,12 +94,12 @@ jobs:
             dist/*.dmg
             dist/*.dmg.blockmap
           draft: false
-          prerelease: true
+          prerelease: ${{ steps.meta.outputs.prerelease }}
           make_latest: false
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
         with:
-          name: argus-dmg-${{ steps.pkg.outputs.short_sha }}
+          name: argus-dmg-${{ steps.meta.outputs.branch }}-${{ steps.meta.outputs.short_sha }}
           path: dist/*.dmg
           retention-days: 30

@@ -4,7 +4,7 @@ on:
   push:
     branches: ['**']        # run on every branch push
   pull_request:
-    branches: [main]        # required gate before merge to main
+    branches: [main, release, develop]
 
 jobs:
   test:

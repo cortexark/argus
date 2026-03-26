@@ -30,6 +30,13 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+# Guard: releases must be cut from main only
+CURRENT_BRANCH=$(git branch --show-current)
+if [[ "$CURRENT_BRANCH" != "main" ]]; then
+    echo -e "${RED}[release]${NC} Must be on main branch to release. Currently on: $CURRENT_BRANCH"
+    exit 1
+fi
+
 log() { echo -e "${GREEN}[release]${NC} $1"; }
 warn() { echo -e "${YELLOW}[release]${NC} $1"; }
 die() { echo -e "${RED}[release]${NC} $1"; exit 1; }
