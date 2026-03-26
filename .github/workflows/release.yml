@@ -7,15 +7,27 @@ on:
 
 jobs:
   test:
-    name: Verify tests pass before release
+    name: Verify tests and build release artifact
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
       - run: npm install
       - run: npm test
+      - run: npm run electron:rebuild
+      - run: ARGUS_RUN_ELECTRON_SMOKE=1 npm run test:electron-runtime
+      - run: npm run electron:build
+      - name: Upload macOS release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets-macos
+          path: |
+            dist/*.dmg
+            dist/*.dmg.blockmap
+            dist/latest-mac.yml
+          if-no-files-found: error
 
   release:
     name: Create GitHub Release
@@ -25,9 +37,15 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0   # full history for changelog
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-assets-macos
+          path: dist
 
       - name: Extract version from tag
         id: version
@@ -68,5 +86,9 @@ jobs:
             ```
 
             See [README](https://github.com/cortexark/argus#readme) for full usage.
+          files: |
+            dist/*.dmg
+            dist/*.dmg.blockmap
+            dist/latest-mac.yml
           draft: false
           prerelease: ${{ contains(steps.version.outputs.version, '-') }}
