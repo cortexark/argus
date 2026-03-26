@@ -48,9 +48,14 @@ logs/
 
 # Build artifacts
 dist/
+dist-old*/
+dist-prebuild-*/
 /build/
 .next/
 out/
+
+# Release DMGs (large binaries — only release notes are tracked)
+releases/*/Argus-*.dmg
 
 # Test coverage
 coverage/
