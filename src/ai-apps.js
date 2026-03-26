@@ -7,8 +7,9 @@ export const AI_APPS = {
   'claude': { name: 'Claude Code (CLI)', category: 'AI Code Editor' },
   'Claude': { name: 'Claude Desktop', category: 'LLM Desktop' },
 
-  // OpenAI Codex CLI
+  // OpenAI Codex — CLI binary is 'codex', desktop app is 'Codex'
   'codex': { name: 'OpenAI Codex (CLI)', category: 'AI Code Editor' },
+  'Codex': { name: 'OpenAI Codex (Desktop)', category: 'AI Code Editor' },
 
   // Cursor
   'cursor': { name: 'Cursor AI Editor', category: 'AI Code Editor' },

@@ -135,13 +135,19 @@ export async function scanAIProcessFiles(db, processes) {
 
       recentInserts.set(dedupKey, nowMs);
 
-      // Find the matching process entry for appLabel
-      const matchedProc = processes.find(p => p.pid === file.pid) || proc;
+      // Find the matching process entry for appLabel.
+      // First try exact PID match, then fall back to matching by the
+      // command name lsof reported (file.command) against known process
+      // names. Never fall back to the outer loop proc blindly, because
+      // lsof -c returns files from ALL processes matching the command
+      // prefix, and a PID from one app should not be labelled as another.
+      const matchedProc = processes.find(p => p.pid === file.pid)
+        || (file.command ? processes.find(p => p.name === file.command) : null);
 
       insertFileAccess(db, {
         pid: file.pid,
-        processName: file.command || proc.name,
-        appLabel: matchedProc.appLabel || null,
+        processName: file.command || (matchedProc ? matchedProc.name : proc.name),
+        appLabel: matchedProc ? matchedProc.appLabel : null,
         filePath: file.filePath,
         accessType: parseFdMode(file.fd),
         sensitivity,
@@ -154,7 +160,7 @@ export async function scanAIProcessFiles(db, processes) {
         alerts.push({
           pid: file.pid,
           processName: file.command || proc.name,
-          appLabel: (processes.find(p => p.pid === file.pid) || proc).appLabel || null,
+          appLabel: matchedProc ? matchedProc.appLabel : null,
           filePath: file.filePath,
           sensitivity,
         });

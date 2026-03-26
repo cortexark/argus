@@ -182,9 +182,9 @@ test('electron-builder is in devDependencies', () => {
   assert.ok(pkg.devDependencies['electron-builder'], 'electron-builder not in devDependencies');
 });
 
-test('menubar is in devDependencies', () => {
+test('menubar is in dependencies', () => {
   const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
-  assert.ok(pkg.devDependencies.menubar, 'menubar not in devDependencies');
+  assert.ok(pkg.dependencies.menubar, 'menubar not in dependencies');
 });
 
 test('better-sqlite3 is in dependencies (native module)', () => {
@@ -201,16 +201,27 @@ test('@electron/rebuild is in devDependencies', () => {
 // 6. Build scripts
 // ==========================================
 
+test('electron:dev rebuilds native modules before launching Electron', () => {
+  const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  const script = pkg.scripts['electron:dev'];
+  assert.ok(script, 'missing electron:dev script');
+  assert.ok(script.includes('electron:rebuild'), 'electron:dev must run electron:rebuild first');
+});
+
 test('npm scripts include electron:build for mac', () => {
   const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
-  assert.ok(pkg.scripts['electron:build'], 'missing electron:build script');
-  assert.ok(pkg.scripts['electron:build'].includes('--mac'), 'electron:build should target mac');
+  const script = pkg.scripts['electron:build'];
+  assert.ok(script, 'missing electron:build script');
+  assert.ok(script.includes('electron:rebuild'), 'electron:build must run electron:rebuild first');
+  assert.ok(script.includes('--mac'), 'electron:build should target mac');
 });
 
 test('npm scripts include electron:build:linux', () => {
   const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
-  assert.ok(pkg.scripts['electron:build:linux'], 'missing electron:build:linux script');
-  assert.ok(pkg.scripts['electron:build:linux'].includes('--linux'), 'should target linux');
+  const script = pkg.scripts['electron:build:linux'];
+  assert.ok(script, 'missing electron:build:linux script');
+  assert.ok(script.includes('electron:rebuild'), 'electron:build:linux must run electron:rebuild first');
+  assert.ok(script.includes('--linux'), 'should target linux');
 });
 
 test('npm scripts include electron:rebuild for native modules', () => {
@@ -219,9 +230,24 @@ test('npm scripts include electron:rebuild for native modules', () => {
   assert.ok(pkg.scripts['electron:rebuild'].includes('better-sqlite3'), 'should rebuild better-sqlite3');
 });
 
-test('npm scripts include electron:dev for development', () => {
+test('npm scripts include node:rebuild for Node test ABI', () => {
   const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
-  assert.ok(pkg.scripts['electron:dev'], 'missing electron:dev script');
+  assert.ok(pkg.scripts['node:rebuild'], 'missing node:rebuild script');
+  assert.ok(pkg.scripts['node:rebuild'].includes('better-sqlite3'), 'node:rebuild should rebuild better-sqlite3');
+});
+
+test('npm test rebuilds native modules for Node before running tests', () => {
+  const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  const script = pkg.scripts.test;
+  assert.ok(script, 'missing test script');
+  assert.ok(script.includes('node:rebuild'), 'test must run node:rebuild first');
+});
+
+test('npm scripts include standalone electron runtime smoke test', () => {
+  const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  const script = pkg.scripts['test:electron-runtime'];
+  assert.ok(script, 'missing test:electron-runtime script');
+  assert.ok(script.includes('electron:rebuild'), 'test:electron-runtime must run electron:rebuild first');
 });
 
 // ==========================================
@@ -288,6 +314,190 @@ test('main.js disables nodeIntegration in renderer', () => {
   const mainJs = readFileSync(join(ROOT, 'electron', 'main.js'), 'utf8');
   assert.ok(mainJs.includes('nodeIntegration: false'), 'should disable nodeIntegration');
   assert.ok(mainJs.includes('contextIsolation: true'), 'should enable contextIsolation');
+});
+
+test('main.js does not reload webContents on menubar show', () => {
+  const mainJs = readFileSync(join(ROOT, 'electron', 'main.js'), 'utf8');
+  assert.ok(!mainJs.includes("mb.on('after-show'"), 'should not bind after-show reload handler');
+  assert.ok(!mainJs.includes('webContents.reload'), 'should avoid forced reloads that can blank the UI');
+});
+
+test('main.js enables GPU-safe settings for menubar stability', () => {
+  const mainJs = readFileSync(join(ROOT, 'electron', 'main.js'), 'utf8');
+  assert.ok(
+    mainJs.includes("appendSwitch('disable-gpu-compositing')"),
+    'should disable GPU compositing for stability'
+  );
+});
+
+test('main.js shows clear first-run install messaging with mode choice', () => {
+  const mainJs = readFileSync(join(ROOT, 'electron', 'main.js'), 'utf8');
+  assert.ok(mainJs.includes('Welcome to Argus'), 'should show welcome messaging on first launch');
+  assert.ok(mainJs.includes('Start in Basic Mode'), 'should offer low-permission basic mode');
+  assert.ok(mainJs.includes('Enable Deep Monitoring'), 'should offer opt-in deep mode');
+  assert.ok(mainJs.includes('ARGUS_PRIVACY_MODE'), 'should persist selected privacy mode');
+});
+
+test('main.js sets explicit BrowserWindow background color', () => {
+  const mainJs = readFileSync(join(ROOT, 'electron', 'main.js'), 'utf8');
+  assert.ok(
+    mainJs.includes("backgroundColor: '#0a0e14'"),
+    'should set a deterministic window background color'
+  );
+});
+
+test('main.js does not preload menubar window (reduce idle memory)', () => {
+  const mainJs = readFileSync(join(ROOT, 'electron', 'main.js'), 'utf8');
+  assert.ok(
+    mainJs.includes('preloadWindow: false'),
+    'preloadWindow should be false to avoid keeping hidden renderer alive'
+  );
+});
+
+test('config.js exposes privacy mode flags', () => {
+  const cfg = readFileSync(join(ROOT, 'src', 'lib', 'config.js'), 'utf8');
+  assert.ok(cfg.includes('PRIVACY_MODE'), 'config should expose PRIVACY_MODE');
+  assert.ok(cfg.includes('DEEP_MONITORING'), 'config should expose DEEP_MONITORING');
+});
+
+test('dashboard switchTab has safe fallback to overview', () => {
+  const uiHtml = readFileSync(join(ROOT, 'src', 'web', 'ui', 'index.html'), 'utf8');
+  assert.ok(
+    uiHtml.includes("if (typeof name !== 'string' || !name) name = 'overview';"),
+    'switchTab should fallback to overview when tab name is invalid'
+  );
+  assert.ok(
+    uiHtml.includes("target = document.getElementById('tab-overview');"),
+    'switchTab should recover by activating tab-overview'
+  );
+});
+
+test('dashboard CSS avoids backdrop-filter to reduce compositor glitches', () => {
+  const uiHtml = readFileSync(join(ROOT, 'src', 'web', 'ui', 'index.html'), 'utf8');
+  assert.ok(
+    !uiHtml.includes('backdrop-filter'),
+    'dashboard should avoid backdrop-filter to reduce black-window rendering glitches'
+  );
+});
+
+test('dashboard pauses refresh loop when hidden to reduce background usage', () => {
+  const uiHtml = readFileSync(join(ROOT, 'src', 'web', 'ui', 'index.html'), 'utf8');
+  assert.ok(
+    uiHtml.includes("document.addEventListener('visibilitychange'"),
+    'dashboard should react to visibility changes'
+  );
+  assert.ok(
+    uiHtml.includes('stopRefreshLoop()'),
+    'dashboard should stop refresh interval while hidden'
+  );
+  assert.ok(
+    uiHtml.includes('startRefreshLoop()'),
+    'dashboard should resume refresh interval when visible'
+  );
+});
+
+test('dashboard exposes privacy mode toggle control', () => {
+  const uiHtml = readFileSync(join(ROOT, 'src', 'web', 'ui', 'index.html'), 'utf8');
+  assert.ok(
+    uiHtml.includes('id="modeToggleBtn"'),
+    'dashboard should render a mode toggle button in the header'
+  );
+  assert.ok(
+    uiHtml.includes('/api/privacy-mode'),
+    'dashboard should reference /api/privacy-mode when toggling mode'
+  );
+});
+
+test('web server exposes /api/privacy-mode endpoint', () => {
+  const serverJs = readFileSync(join(ROOT, 'src', 'web', 'server.js'), 'utf8');
+  assert.ok(
+    serverJs.includes("path === '/api/privacy-mode'"),
+    'server should expose POST /api/privacy-mode'
+  );
+});
+
+test('dashboard exposes restart control and restart API call', () => {
+  const uiHtml = readFileSync(join(ROOT, 'src', 'web', 'ui', 'index.html'), 'utf8');
+  assert.ok(
+    uiHtml.includes('id="restartBtn"'),
+    'dashboard should render Restart Argus button'
+  );
+  assert.ok(
+    uiHtml.includes('/api/app/restart'),
+    'dashboard should reference /api/app/restart when restart button is clicked'
+  );
+});
+
+test('web server exposes /api/app/restart endpoint', () => {
+  const serverJs = readFileSync(join(ROOT, 'src', 'web', 'server.js'), 'utf8');
+  assert.ok(
+    serverJs.includes("path === '/api/app/restart'"),
+    'server should expose POST /api/app/restart'
+  );
+});
+
+test('dashboard exposes uninstall controls and API calls', () => {
+  const uiHtml = readFileSync(join(ROOT, 'src', 'web', 'ui', 'index.html'), 'utf8');
+  assert.ok(
+    uiHtml.includes('id="uninstallBtn"'),
+    'dashboard should render Uninstall button'
+  );
+  assert.ok(
+    uiHtml.includes("postJSON('/api/app/uninstall-service'"),
+    'dashboard should call /api/app/uninstall-service'
+  );
+  assert.ok(
+    uiHtml.includes("postJSON('/api/app/uninstall-data'"),
+    'dashboard should call /api/app/uninstall-data'
+  );
+});
+
+test('web server exposes uninstall endpoints', () => {
+  const serverJs = readFileSync(join(ROOT, 'src', 'web', 'server.js'), 'utf8');
+  assert.ok(
+    serverJs.includes("path === '/api/app/uninstall-info'"),
+    'server should expose GET /api/app/uninstall-info'
+  );
+  assert.ok(
+    serverJs.includes("path === '/api/app/uninstall-service'"),
+    'server should expose POST /api/app/uninstall-service'
+  );
+  assert.ok(
+    serverJs.includes("path === '/api/app/uninstall-data'"),
+    'server should expose POST /api/app/uninstall-data'
+  );
+});
+
+test('tray menu uses right-click popup on macOS (avoids overlap with menubar window)', () => {
+  const trayJs = readFileSync(join(ROOT, 'electron', 'tray.js'), 'utf8');
+  assert.ok(
+    trayJs.includes("process.platform !== 'darwin'"),
+    'tray should branch behavior for macOS vs other platforms'
+  );
+  assert.ok(
+    trayJs.includes("mb.tray.on('right-click'"),
+    'tray should open context menu on right-click for macOS'
+  );
+  assert.ok(
+    trayJs.includes('popUpContextMenu'),
+    'tray should use popUpContextMenu on macOS'
+  );
+});
+
+test('tray Generate Report opens report modal instead of non-existent report tab', () => {
+  const trayJs = readFileSync(join(ROOT, 'electron', 'tray.js'), 'utf8');
+  assert.ok(
+    trayJs.includes("window.openReportModal"),
+    'tray Generate Report should call openReportModal when available'
+  );
+  assert.ok(
+    trayJs.includes("document.getElementById('reportBtn')"),
+    'tray Generate Report should fallback to clicking #reportBtn'
+  );
+  assert.ok(
+    !trayJs.includes("data-tab=\\\"report\\\""),
+    'tray should not target a data-tab=\"report\" element because that tab does not exist'
+  );
 });
 
 export const results = { passed, failed };
