@@ -96,7 +96,6 @@ function openCodexDb() {
   }
   try {
     codexDb = new Database(CODEX_STATE_DB, { readonly: true, fileMustExist: true });
-    codexDb.pragma('journal_mode = WAL');
     return codexDb;
   } catch (err) {
     warn(`Cannot open Codex DB: ${err.message}`);
@@ -269,7 +268,6 @@ export function readCursorUsage() {
   if (!cursorDb) {
     try {
       cursorDb = new Database(CURSOR_TRACKING_DB, { readonly: true, fileMustExist: true });
-      cursorDb.pragma('journal_mode = WAL');
     } catch (err) {
       warn(`Cannot open Cursor DB: ${err.message}`);
       return null;

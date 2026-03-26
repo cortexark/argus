@@ -1543,7 +1543,14 @@ function buildUsageToolCard(tool) {
   card.style.setProperty('--tool-color', toolColors[tool.provider] || '#00d4a0');
 
   var models = tool.byModel || [];
-  var totalTokens = tool.totalTokens || 0;
+  function getModelTokens(model) {
+    if (!model) return 0;
+    if (model.tokens != null) return model.tokens || 0;
+    return (model.inputTokens || 0) + (model.outputTokens || 0);
+  }
+  var totalTokens = tool.totalTokens || models.reduce(function(sum, model) {
+    return sum + getModelTokens(model);
+  }, 0);
 
   // Header
   var header = document.createElement('div');
@@ -1588,7 +1595,8 @@ function buildUsageToolCard(tool) {
     legend.className = 'usage-model-legend';
 
     models.forEach(function(m, i) {
-      var pct = totalTokens > 0 ? (m.tokens / totalTokens * 100) : 0;
+      var modelTokens = getModelTokens(m);
+      var pct = totalTokens > 0 ? (modelTokens / totalTokens * 100) : 0;
       var color = MODEL_COLORS[i % MODEL_COLORS.length];
 
       var seg = document.createElement('div');
@@ -1603,7 +1611,7 @@ function buildUsageToolCard(tool) {
       dot.className = 'usage-model-dot';
       dot.style.background = color;
       item.appendChild(dot);
-      item.appendChild(document.createTextNode(' ' + (m.model || 'unknown') + ' (' + fmtTokens(m.tokens || m.inputTokens || 0) + ')'));
+      item.appendChild(document.createTextNode(' ' + (m.model || 'unknown') + ' (' + fmtTokens(modelTokens) + ')'));
       legend.appendChild(item);
     });
 
