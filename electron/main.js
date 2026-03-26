@@ -136,19 +136,13 @@ app.whenReady().then(async () => {
       const { onRestartRequested } = await import('../src/web/server.js');
       onRestartRequested(() => {
         logStartup('Restart requested from dashboard');
-        // Stop backend first, then relaunch after a short delay so the
-        // OS has time to release the port and spawn the new process.
-        const doRelaunch = () => {
-          logStartup('Relaunching...');
-          app.relaunch();
-          // Use setTimeout so relaunch() registers before exit kills the process
-          setTimeout(() => app.exit(0), 200);
-        };
-        if (argusStop) {
-          Promise.resolve(argusStop()).then(doRelaunch).catch(doRelaunch);
-        } else {
-          doRelaunch();
-        }
+        // Tell Electron to relaunch, then exit. Do NOT call argusStop() —
+        // relaunch spawns a NEW process, so cleanup of the old process
+        // is handled by the OS on exit. Calling stop() corrupts shared
+        // module state that the new process inherits.
+        app.relaunch();
+        logStartup('Relaunching...');
+        setTimeout(() => app.exit(0), 300);
       });
       logStartup('Restart callback registered');
     } catch (err) {
