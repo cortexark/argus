@@ -1,0 +1,59 @@
+{
+  "manifest_version": "0.3",
+  "name": "argus",
+  "version": "1.0.0",
+  "description": "Monitor what AI agents access on your machine — files, credentials, network connections, and browser data. Argus sees everything your AI apps do.",
+  "author": {
+    "name": "cortexark",
+    "url": "https://github.com/cortexark"
+  },
+  "homepage": "https://github.com/cortexark/argus",
+  "documentation": "https://github.com/cortexark/argus#claude-desktop-mcp-extension",
+  "support": "https://github.com/cortexark/argus/issues",
+  "license": "MIT",
+  "server": {
+    "type": "node",
+    "entry_point": "src/mcp/server.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/src/mcp/server.js"]
+    }
+  },
+  "tools": [
+    {
+      "name": "get_active_ai_processes",
+      "description": "List AI agents and LLM apps detected on this machine"
+    },
+    {
+      "name": "get_file_accesses",
+      "description": "Show sensitive file accesses by AI agents (credentials, browser data, documents)"
+    },
+    {
+      "name": "get_network_activity",
+      "description": "Show network connections made by AI agents"
+    },
+    {
+      "name": "get_sessions",
+      "description": "Show AI agent session history (start, stop, duration)"
+    },
+    {
+      "name": "get_daily_summary",
+      "description": "Get daily stats — process count, alerts, network events, AI services"
+    },
+    {
+      "name": "get_injection_alerts",
+      "description": "Show prompt injection attempts detected in files"
+    },
+    {
+      "name": "get_ai_usage",
+      "description": "Show AI tool token usage and estimated costs"
+    },
+    {
+      "name": "get_monitoring_status",
+      "description": "Check monitoring status and overall stats"
+    }
+  ],
+  "privacy_policies": [
+    "https://github.com/cortexark/argus#privacy-policy"
+  ]
+}

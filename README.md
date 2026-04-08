@@ -555,6 +555,132 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on:
 - Creating new notification types
 - Running and writing tests
 
+## Claude Desktop MCP Extension
+
+Argus ships with a built-in MCP server that integrates directly with Claude Desktop. Ask Claude questions about what AI agents are doing on your machine — in natural language.
+
+### Setup
+
+Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "argus": {
+      "command": "node",
+      "args": ["/path/to/argus/src/mcp/server.js"]
+    }
+  }
+}
+```
+
+Restart Claude Desktop. Argus tools appear automatically.
+
+### Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `get_active_ai_processes` | List AI agents detected in the last N hours |
+| `get_file_accesses` | Sensitive file access alerts (credentials, browser data) |
+| `get_network_activity` | Network connections to AI endpoints |
+| `get_sessions` | Session history with start/stop/duration |
+| `get_daily_summary` | Daily stats for any date |
+| `get_injection_alerts` | Prompt injection detections |
+| `get_ai_usage` | Token usage and estimated API costs |
+| `get_monitoring_status` | Overall Argus status and stats |
+
+All tools are **read-only** — they query the local SQLite database and never modify anything.
+
+### Example 1: Check what's running
+
+**Prompt:** "What AI agents ran on my machine today?"
+
+**Response:**
+```json
+[
+  { "name": "claude", "app_label": "Claude Code (CLI)", "category": "AI Code Editor" },
+  { "name": "Claude", "app_label": "Claude Desktop", "category": "LLM Desktop" },
+  { "name": "ollama", "app_label": "Ollama", "category": "Local LLM" }
+]
+```
+
+### Example 2: Check for credential access
+
+**Prompt:** "Did any AI app access my SSH keys or credentials?"
+
+**Response:**
+```json
+[
+  {
+    "process_name": "Claude",
+    "app_label": "Claude Desktop",
+    "file_path": "/Users/you/.ssh/id_rsa",
+    "sensitivity": "credentials",
+    "is_alert": 1,
+    "timestamp": "2026-04-03T14:22:19.000Z"
+  },
+  {
+    "process_name": "Claude",
+    "app_label": "Claude Desktop",
+    "file_path": "/Users/you/Library/Keychains/login.keychain-db",
+    "sensitivity": "credentials",
+    "is_alert": 1,
+    "timestamp": "2026-04-03T14:10:04.000Z"
+  }
+]
+```
+
+### Example 3: Daily summary
+
+**Prompt:** "Give me a summary of AI activity for yesterday"
+
+**Response:**
+```json
+{
+  "date": "2026-04-02",
+  "processCount": 4,
+  "fileAlertCount": 21,
+  "networkEventCount": 5265,
+  "topPorts": [443, 80, 9222],
+  "aiServicesHit": ["Anthropic", "OpenAI", "GitHub Copilot"]
+}
+```
+
+## Privacy Policy
+
+Argus is a **local-only** privacy monitoring tool. This policy covers both the Argus application and its MCP extension for Claude Desktop.
+
+### Data Collection
+- Argus monitors AI application activity (processes, file accesses, network connections) on your local machine
+- All monitoring data is stored in a local SQLite database at `~/.argus/data.db`
+- The MCP extension reads from this same local database
+
+### Data Transmission
+- **No data is ever transmitted to any external server, cloud service, or third party**
+- The MCP extension communicates only with Claude Desktop via local STDIO (standard input/output)
+- There is no telemetry, analytics, crash reporting, or tracking of any kind
+- The application makes zero outbound network connections
+
+### Data Storage
+- All data remains on your local filesystem at `~/.argus/`
+- Database file permissions are set to owner-only (mode 0600)
+- You can inspect, export, or delete the database at any time
+- Old events are automatically cleaned up after 7 days
+
+### Data Sharing
+- Argus does not share data with anyone
+- The MCP extension provides data only to Claude Desktop running on the same machine
+- No third-party services, APIs, or SDKs are used for data processing
+
+### Your Control
+- You can pause/resume monitoring at any time via the tray menu
+- You can delete all data by removing `~/.argus/`
+- All source code is open source and auditable at https://github.com/cortexark/argus
+- Uninstall instructions: `argus uninstall && npm uninstall -g argus-monitor`
+
+### Contact
+For privacy questions or concerns, open an issue at https://github.com/cortexark/argus/issues
+
 ## Related Tools
 
 - **Little Snitch** — Network firewall (port-level monitoring)

@@ -1,0 +1,14 @@
+.git
+node_modules
+dist
+dist-old*
+releases
+data
+tests
+docs/screenshots
+electron/assets
+homebrew
+.project
+.unused
+*.dmg
+*.zip
